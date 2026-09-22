@@ -18,8 +18,10 @@ IDLE_UNLOAD_SECONDS = 300
 
 
 class Transcriber:
-    def __init__(self, model_size: str, models_dir: Path, language: str | None) -> None:
+    def __init__(self, model_size: str, models_dir: Path, language: str | None, vocabulary: str = "") -> None:
         self._model_size = model_size
+        # Whisper uses this as preceding context, which biases it towards these spellings.
+        self._hint = f"{vocabulary.strip().rstrip('.')}." if vocabulary.strip() else None
         self._models_dir = models_dir
         self._language = language or None  # None = auto-detect
         self._model = None
@@ -39,6 +41,7 @@ class Transcriber:
                 language=self._language,
                 beam_size=1,
                 condition_on_previous_text=False,
+                initial_prompt=self._hint,
             )
             text = " ".join(s.text.strip() for s in segments).strip()
             log.info(

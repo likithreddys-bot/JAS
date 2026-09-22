@@ -62,3 +62,42 @@ def load_openwakeword(model_name: str, threshold: float) -> WakeWordDetector:
         reset=model.reset,
         threshold=threshold,
     )
+
+
+class PorcupineDetector:
+    """Picovoice Porcupine keyword spotting (e.g. the built-in "jarvis"); same interface as WakeWordDetector.
+
+    Porcupine consumes fixed 512-sample frames, so our 1280-sample mic frames are re-chunked.
+    """
+
+    def __init__(self, engine) -> None:
+        self._engine = engine
+        self._frame_length = engine.frame_length
+        self._buffer = np.zeros(0, dtype=np.int16)
+
+    def process(self, frame: np.ndarray) -> float | None:
+        self._buffer = np.concatenate([self._buffer, frame])
+        fired = False
+        while len(self._buffer) >= self._frame_length:
+            chunk, self._buffer = self._buffer[: self._frame_length], self._buffer[self._frame_length :]
+            if self._engine.process(chunk.tolist()) >= 0:
+                fired = True
+        return 1.0 if fired else None  # Porcupine gives a yes/no, not a score
+
+    def reset(self) -> None:
+        self._buffer = np.zeros(0, dtype=np.int16)
+
+
+def load_porcupine(access_key: str, keyword: str, sensitivity: float) -> PorcupineDetector:
+    import pvporcupine
+
+    if not access_key:
+        raise ValueError("No PICOVOICE_ACCESS_KEY in .env")
+    try:
+        engine = pvporcupine.create(access_key=access_key, keywords=[keyword], sensitivities=[sensitivity])
+    except pvporcupine.PorcupineActivationLimitError as exc:
+        raise ValueError("Picovoice key has reached its device limit") from exc
+    except pvporcupine.PorcupineActivationError as exc:
+        raise ValueError("Picovoice AccessKey was rejected") from exc
+    log.info("Porcupine wake word %r loaded (sensitivity %.2f)", keyword, sensitivity)
+    return PorcupineDetector(engine)

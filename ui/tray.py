@@ -76,9 +76,9 @@ class Tray(QSystemTrayIcon):
             self.show_window()
 
     def show_window(self) -> None:
+        # No activation: the orb must not steal keyboard focus from the user's app.
         self._window.show()
         self._window.raise_()
-        self._window.requestActivate()
 
     def _on_state(self) -> None:
         if self._bridge.state == "wake_detected" and not self._window.isVisible():

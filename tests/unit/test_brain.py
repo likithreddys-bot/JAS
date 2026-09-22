@@ -47,22 +47,34 @@ def test_factory_picks_provider():
         create_responder(Settings(_env_file=None, llm_provider="gpt"))
 
 
-class _Chunk:
-    def __init__(self, text):
-        self.text = text
+def _chunk(*parts):
+    from google.genai import types
+
+    return types.GenerateContentResponse(
+        candidates=[types.Candidate(content=types.Content(role="model", parts=list(parts)))]
+    )
 
 
-def _brain_with(streams):
-    """GeminiBrain whose API returns `streams[model]`: a list of texts, or an exception to raise."""
-    brain = GeminiBrain("test-key", "busy-model, good-model")
+def _text(t):
+    from google.genai import types
+
+    return types.Part.from_text(text=t)
+
+
+def _brain_with(streams, executor=None):
+    """GeminiBrain whose API returns `streams[model]`: a list of texts/parts (or a list of such
+    lists, one per call), or an exception to raise."""
+    brain = GeminiBrain("test-key", "busy-model, good-model", executor)
     calls = []
 
     def generate_content_stream(model, contents, config):
         calls.append(model)
         result = streams[model]
+        if isinstance(result, list) and result and isinstance(result[0], list):
+            result = result.pop(0)
         if isinstance(result, Exception):
             raise result
-        return (_Chunk(t) for t in result)
+        return (_chunk(p if not isinstance(p, str) else _text(p)) for p in result)
 
     brain._client = type("C", (), {"models": type("M", (), {"generate_content_stream": staticmethod(generate_content_stream)})})()
     return brain, calls
@@ -90,4 +102,52 @@ def test_gemini_keeps_conversation_history():
     brain, _ = _brain_with({"busy-model": ["Paris."], "good-model": []})
     list(brain.reply("Capital of France?"))
     list(brain.reply("Population?"))
-    assert [c["role"] for c in brain._history] == ["user", "model", "user", "model"]
+    assert [c.role for c in brain._history] == ["user", "model", "user", "model"]
+
+
+def test_gemini_tool_loop_runs_tools_and_speaks_result():
+    from google.genai import types
+
+    from app.core.jarvis import Jarvis
+    from app.tools.base import Tool, ToolResult
+    from app.tools.executor import ToolExecutor
+
+    opened = []
+    tool = Tool("open_application", "Open an app", {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]},
+                lambda name: opened.append(name) or ToolResult(True, {"app": "Notepad"}), lambda name: f"Opening {name}")
+    from app.core.state.states import JarvisState as S
+
+    core = Jarvis()
+    core.start()
+    for state in (S.WAKE_DETECTED, S.LISTENING, S.TRANSCRIBING, S.THINKING):
+        core.state.transition(state)
+    executor = ToolExecutor(core, [tool])
+    call = types.Part(function_call=types.FunctionCall(id="c1", name="open_application", args={"name": "notepad"}))
+    brain, calls = _brain_with({"busy-model": [[call], ["Done, Notepad is open."]], "good-model": []}, executor)
+
+    assert "".join(brain.reply("open notepad")) == "Done, Notepad is open."
+    assert opened == ["notepad"] and calls == ["busy-model", "busy-model"]
+    roles = [c.role for c in brain._history]
+    assert roles == ["user", "model", "user", "model"]
+    response = brain._history[2].parts[0].function_response
+    assert response.id == "c1" and response.response == {"ok": True, "app": "Notepad"}
+
+
+def test_gemini_stops_after_too_many_tool_steps():
+    from google.genai import types
+
+    from app.brain.gemini import MAX_TOOL_STEPS, TOO_MANY_STEPS
+    from app.core.jarvis import Jarvis
+    from app.tools.base import Tool, ToolResult
+    from app.tools.executor import ToolExecutor
+
+    tool = Tool("list_open_windows", "List", {"type": "object", "properties": {}}, lambda: ToolResult(True), lambda: "Listing")
+    from app.core.state.states import JarvisState as S
+
+    core = Jarvis()
+    core.start()
+    for state in (S.WAKE_DETECTED, S.LISTENING, S.TRANSCRIBING, S.THINKING):
+        core.state.transition(state)
+    call = types.Part(function_call=types.FunctionCall(name="list_open_windows", args={}))
+    brain, _ = _brain_with({"busy-model": [[call] for _ in range(MAX_TOOL_STEPS + 1)], "good-model": []}, ToolExecutor(core, [tool]))
+    assert "".join(brain.reply("loop forever")) == TOO_MANY_STEPS

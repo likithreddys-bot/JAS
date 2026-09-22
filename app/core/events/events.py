@@ -42,3 +42,17 @@ class TranscriptReady:
 @dataclass(frozen=True)
 class AssistantReply:
     text: str
+
+
+@dataclass(frozen=True)
+class ToolStarted:
+    step_id: int
+    label: str
+
+
+@dataclass(frozen=True)
+class ToolFinished:
+    step_id: int
+    label: str
+    ok: bool
+    error: str = ""

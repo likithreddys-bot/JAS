@@ -15,12 +15,15 @@ from app.config.logging_setup import setup_logging
 from app.config.settings import PROJECT_ROOT, Settings, get_settings
 from app.core.jarvis import Jarvis
 from app.core.state.states import JarvisState
+from app.tools.computer import computer_tools
+from app.tools.computer.apps import AppIndex
+from app.tools.executor import ToolExecutor
 from app.voice.audio.microphone import Microphone
 from app.voice.listen.recorder import UtteranceRecorder
 from app.voice.pipeline import ACK_PHRASE, NOT_UNDERSTOOD, VoicePipeline, echo_reply
 from app.voice.stt.transcriber import Transcriber
 from app.voice.tts.speaker import Speaker
-from app.voice.wake_word.detector import load_openwakeword
+from app.voice.wake_word.detector import load_openwakeword, load_porcupine
 from app.voice.wake_word.service import WakeWordService
 from ui.bridge import UiBridge
 from ui.single_instance import InstanceServer, notify_running_instance
@@ -36,8 +39,18 @@ def start_voice(core: Jarvis, settings: Settings, services: list[WakeWordService
     if not settings.wake_word_enabled:
         core.start()
         return
+    wake_problem = None
+    if settings.wake_word_engine.strip().lower() == "porcupine":
+        try:
+            detector = load_porcupine(
+                settings.picovoice_access_key, settings.porcupine_keyword, settings.porcupine_sensitivity
+            )
+        except Exception as exc:
+            log.warning("Porcupine unavailable (%s); falling back to 'Hey Jarvis'", exc)
+            wake_problem = f"{exc}. Using \"Hey Jarvis\" instead."
     try:
-        detector = load_openwakeword(settings.wake_word_model, settings.wake_word_threshold)
+        if settings.wake_word_engine.strip().lower() != "porcupine" or wake_problem:
+            detector = load_openwakeword(settings.wake_word_model, settings.wake_word_threshold)
         speaker = Speaker(settings.tts_voice, settings.models_dir / "piper", settings.tts_speed)
         speaker.prepare(ACK_PHRASE, NOT_UNDERSTOOD)
     except Exception as exc:
@@ -54,19 +67,30 @@ def start_voice(core: Jarvis, settings: Settings, services: list[WakeWordService
         reset_vad=vad.reset_states,
     )
     transcriber = Transcriber(
-        settings.stt_model, settings.models_dir / "whisper", settings.stt_language
+        settings.stt_model, settings.models_dir / "whisper", settings.stt_language, settings.stt_vocabulary
     )
+    app_index = AppIndex()
+    threading.Thread(target=app_index.refresh, name="app-index", daemon=True).start()
+    executor = ToolExecutor(core, computer_tools(app_index))
     try:
-        respond = create_responder(settings)
+        respond = create_responder(settings, executor)
     except BrainError as exc:
         log.warning("%s Falling back to echo replies.", exc)
         respond = echo_reply
-    pipeline = VoicePipeline(core, speaker, transcriber, recorder, respond=respond)
+    pipeline = VoicePipeline(
+        core, speaker, transcriber, recorder, respond=respond, follow_up_seconds=settings.follow_up_seconds
+    )
+    executor.set_confirmer(pipeline.ask_yes_no)
 
     device = settings.microphone_device or None
     if device is not None and device.isdigit():
         device = int(device)
     core.start()
+    if wake_problem:  # show why the wake word differs from what was configured, then carry on
+        core.state.transition(JarvisState.ERROR, wake_problem)
+        timer = threading.Timer(8.0, core.state.transition_from, (JarvisState.ERROR, JarvisState.STANDBY))
+        timer.daemon = True
+        timer.start()
     service = WakeWordService(
         core.bus, Microphone(device), detector, core.state.current, listen_sink=pipeline.feed
     )

@@ -80,3 +80,30 @@ def test_tray_menu_actions_drive_core_and_window(app):
     app.processEvents()
     assert tray.contextMenu().isVisible()
     tray.contextMenu().close()
+
+
+def test_orb_shows_live_tool_steps(app):
+    from app.core.events.events import ToolFinished, ToolStarted
+
+    core = Jarvis()
+    bridge = UiBridge(core)
+    engine = QQmlApplicationEngine()
+    warnings = []
+    engine.warnings.connect(lambda ws: warnings.extend(w.toString() for w in ws))
+    engine.rootContext().setContextProperty("bridge", bridge)
+    engine.load(QUrl.fromLocalFile(str(PROJECT_ROOT / "ui" / "qml" / "Orb.qml")))
+    window = engine.rootObjects()[0]
+    core.start()
+    base_height = window.height()
+
+    core.bus.publish(ToolStarted(1, "Opening Notepad"))
+    core.bus.publish(ToolFinished(1, "Opening Notepad", True))
+    core.bus.publish(ToolStarted(2, "Typing hello"))
+    app.processEvents()
+    assert [(s["label"], s["status"]) for s in bridge.steps] == [("Opening Notepad", "done"), ("Typing hello", "running")]
+    assert window.height() > base_height  # grew to fit the checklist
+    assert warnings == []
+
+    core.state.transition(S.WAKE_DETECTED)  # a new request clears the old steps
+    app.processEvents()
+    assert bridge.steps == []

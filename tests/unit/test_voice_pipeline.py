@@ -217,3 +217,82 @@ def test_brain_failure_is_shown_and_spoken(monkeypatch):
     assert wait_for(lambda: reasons == ["Can't reach Claude. Check the internet connection."])
     assert wait_for(lambda: speaker.said[-1] == "Sorry, something went wrong.")
     assert wait_for(lambda: core.state.current is S.STANDBY)
+
+
+def _turn_waiting_for_confirmation(answer):
+    """Run a turn whose responder asks a yes/no question; return (pipeline, speaker, result box)."""
+    core = Jarvis()
+    speaker = FakeSpeaker()
+    answers = iter(["close chrome", answer])
+    stt = FakeTranscriber("")
+    stt.transcribe = lambda audio: next(answers)
+    box = {}
+    holder = {}
+
+    def respond(text):
+        box["confirmed"] = holder["pipeline"].ask_yes_no("Should I close Chrome?")
+        yield "Okay, closing it." if box["confirmed"] else "Okay, I won't."
+
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=respond, max_listen_seconds=3)
+    holder["pipeline"] = pipeline
+    core.start()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)  # the request
+    assert wait_for(lambda: speaker.said[-1:] == ["Should I close Chrome?"] and core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)  # the answer
+    assert wait_for(lambda: core.state.current is S.STANDBY and "confirmed" in box)
+    return speaker, box
+
+
+def test_voice_confirmation_yes():
+    speaker, box = _turn_waiting_for_confirmation("Yes, please.")
+    assert box["confirmed"] is True and speaker.said[-1] == "Okay, closing it."
+
+
+def test_voice_confirmation_no_or_unclear_means_no():
+    for answer in ("No.", "No, yes, I mean no", "hmm"):
+        speaker, box = _turn_waiting_for_confirmation(answer)
+        assert box["confirmed"] is False and speaker.said[-1] == "Okay, I won't."
+
+
+def test_follow_up_without_wake_word_then_silence_ends_conversation():
+    core = Jarvis()
+    speaker = FakeSpeaker()
+    heard = iter(["what's the capital of Japan", "and its population"])
+    stt = FakeTranscriber("")
+    stt.transcribe = lambda audio: next(heard)
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=echo_reply,
+                             max_listen_seconds=3, follow_up_seconds=0.6)
+    states = []
+    core.bus.subscribe(StateChanged, lambda e: states.append(e.current))
+    core.start()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
+    # answered, then listening again for a follow-up — no wake word
+    assert wait_for(lambda: len(speaker.said) == 2 and core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
+    assert wait_for(lambda: len(speaker.said) == 3 and core.state.current is S.LISTENING)
+    speak_into(pipeline, [SILENCE] * 10)  # nothing more to say
+    assert wait_for(lambda: core.state.current is S.STANDBY)
+    assert speaker.said == ["Yes?", "You said: what's the capital of Japan", "You said: and its population"]
+    assert states.count(S.WAKE_DETECTED) == 1
+
+
+def test_noise_during_follow_up_ends_quietly():
+    core = Jarvis()
+    speaker = FakeSpeaker()
+    heard = iter(["hello", ""])  # second "utterance" was just noise
+    stt = FakeTranscriber("")
+    stt.transcribe = lambda audio: next(heard)
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=echo_reply,
+                             max_listen_seconds=3, follow_up_seconds=0.6)
+    core.start()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
+    assert wait_for(lambda: len(speaker.said) == 2 and core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 2 + [SILENCE] * 10)
+    assert wait_for(lambda: core.state.current is S.STANDBY)
+    assert NOT_UNDERSTOOD not in speaker.said  # no "Sorry, I didn't catch that" for noise

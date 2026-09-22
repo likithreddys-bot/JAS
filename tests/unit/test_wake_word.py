@@ -156,3 +156,35 @@ def test_mic_error_shows_reason_in_error_state():
     assert core.state.current is S.ERROR
     core.bus.publish(MicrophoneRecovered())
     assert core.state.current is S.STANDBY
+
+
+class FakePorcupine:
+    frame_length = 512
+
+    def __init__(self, fire_at_chunk=None):
+        self.chunks = 0
+        self.fire_at = fire_at_chunk
+
+    def process(self, pcm):
+        assert len(pcm) == 512
+        self.chunks += 1
+        return 0 if self.chunks == self.fire_at else -1
+
+
+def test_porcupine_adapter_rechunks_mic_frames():
+    from app.voice.wake_word.detector import PorcupineDetector
+
+    engine = FakePorcupine(fire_at_chunk=5)
+    d = PorcupineDetector(engine)
+    results = [d.process(np.zeros(1280, dtype=np.int16)) for _ in range(3)]  # 3840 samples = 7 chunks + 256 left
+    assert engine.chunks == 7
+    assert results == [None, 1.0, None]  # chunk 5 arrives during the 2nd mic frame
+
+
+def test_porcupine_without_key_is_a_clear_error():
+    import pytest
+
+    from app.voice.wake_word.detector import load_porcupine
+
+    with pytest.raises(ValueError, match="PICOVOICE_ACCESS_KEY"):
+        load_porcupine("", "jarvis", 0.5)

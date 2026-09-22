@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     data_dir: Path = PROJECT_ROOT / "data"
 
     wake_word_enabled: bool = True
+    # "porcupine" = say just "Jarvis" (needs a free Picovoice AccessKey); "openwakeword" = "Hey Jarvis".
+    wake_word_engine: str = "openwakeword"
+    picovoice_access_key: str = ""
+    porcupine_keyword: str = "jarvis"
+    porcupine_sensitivity: float = 0.5
     wake_word_model: str = "hey_jarvis"
     wake_word_threshold: float = 0.5
     # Input device name or index as understood by sounddevice; empty = system default.
@@ -32,6 +37,11 @@ class Settings(BaseSettings):
     stt_model: str = "small"
     # Language code for speech-to-text; empty = auto-detect (less reliable on short phrases).
     stt_language: str = "en"
+    # Names and words speech recognition should expect (people, apps, places), comma-separated.
+    stt_vocabulary: str = "Jarvis, Notepad, WhatsApp, VS Code, Chrome, YouTube"
+
+    # After answering, keep listening this many seconds for a follow-up without the wake word (0 = off).
+    follow_up_seconds: float = 6.0
 
     llm_provider: str = "gemini"  # "gemini" (free tier) or "claude"
     gemini_api_key: str = ""

@@ -381,8 +381,8 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done & verified
 | 3 Voice | ✅ | Verified by user 2026-09-22: "Yes?" → listen → transcribe → echo reply. Whisper small: 2.7 s for 4.8 s audio, exact transcript on test sentence. Open issue: wake word needs a pause between "Hey" and "Jarvis" for this user's fast speech |
 | 4 LLM | ✅ | Verified by user 2026-09-22 by voice: conversation, follow-up context, cancel, honest refusal of PC control. Gemini free tier (`gemini-3.1-flash-lite` first, failover list); first sentence 1.1–2.7 s |
 | **Milestone 1** | ✅ | 2026-09-22: autostart → "Hey Jarvis" → "Yes?" → STT → LLM → TTS answer, all verified by user |
-| 5 Computer Control | ⬜ | |
-| 6 Browser | ⬜ | |
+| 5 Computer Control | ✅ | Verified by user 2026-09-22 (open/type/close+confirm/volume/unknown app). Typing garble fixed (1 char per SendInput), Whisper vocabulary, follow-up mode, Porcupine "Jarvis" option (awaiting AccessKey). Mouse deferred to Phase 10 |
+| 6 Browser | 🟨 | In progress |
 | 7 Memory | ⬜ | |
 | 8 Scheduler | ⬜ | |
 | 9 Google | ⬜ | |
@@ -429,4 +429,11 @@ Each major decision is recorded here: **context → options → decision → con
 | ADR-013 | 2026-09-22 | Brain: Claude API, `claude-opus-5`, effort `low` for fast spoken replies, streamed; server-side `fallbacks: "default"` enabled (re-runs a safety-declined request on Anthropic's recommended fallback model). Reply spoken sentence-by-sentence as it streams. History kept in memory, append-only; reset after 10 min idle or 20 turns. Key in `.env` `CLAUDE_API_KEY`; without a key JARVIS falls back to echo replies | Accepted |
 | ADR-015 | 2026-09-22 | Claude Pro subscription does not include API access, so the default provider is **Gemini free tier** (`gemini-flash-latest` alias via `google-genai`) until the user funds the Claude API. `LLM_PROVIDER=gemini|claude` switches; both share one system prompt and the same streaming `str -> Iterator[str]` interface. Note: Google may use free-tier prompts to improve its products | Accepted |
 | ADR-014 | 2026-09-22 | "Cancel / never mind / stop" handled locally without the LLM. System prompt states JARVIS can't control the PC yet, so it never claims actions it didn't do | Accepted |
+| ADR-016 | 2026-09-22 | Tools: one `Tool` type (JSON schema, risk, label, confirm question) + `ToolExecutor` that validates args, enforces risk (MEDIUM/HIGH → spoken yes/no confirmation; silence = no), drives EXECUTING/OBSERVING and publishes ToolStarted/ToolFinished for the orb checklist. Tools verify their effect (window appeared / closed / focused) before returning ok | Accepted |
+| ADR-017 | 2026-09-22 | Apps launched via `Get-StartApps` + `shell:AppsFolder\<AppID>` (covers classic and Store apps). Fuzzy match threshold 0.85 so misheard names work but "photoshop" never opens "Photos". Typing via `SendInput` Unicode (verified: ✓, é, Hindi). Mouse tools deliberately omitted until vision (Phase 10). Tool use wired for Gemini only; Claude brain stays conversation-only until it can be tested with a key | Accepted |
+| ADR-018 | 2026-09-22 | Text entry pastes via the clipboard (then restores the user's text clipboard): key-by-key `SendInput` dropped/repeated characters in Win11 Notepad even with 12 ms gaps ("hello ucky", "sscaped wwwlines"). Paste: 20/20 exact incl. 1,260 chars of Hindi/Telugu/Tamil in 0.6 s, verified by reading the text back. Key-by-key typing is only used if the clipboard holds non-text (e.g. an image) so it's never destroyed. Literal `
+` from the LLM is converted to real line breaks | Accepted |
+| ADR-019 | 2026-09-22 | `STT_VOCABULARY` passed to Whisper as `initial_prompt` so names are spelled right ("licky" → "Likki"), beam 1 kept (beam 5: +0.7 s, no gain) | Accepted |
+| ADR-020 | 2026-09-22 | Follow-up mode: after a reply JARVIS listens `FOLLOW_UP_SECONDS` (6) more without the wake word; silence or noise ends the conversation quietly | Accepted |
+| ADR-021 | 2026-09-22 | Single-word "Jarvis": Picovoice Porcupine built-in keyword (local, needs free AccessKey) selectable via `WAKE_WORD_ENGINE=porcupine`; on a missing/rejected key JARVIS shows why and falls back to openWakeWord "Hey Jarvis" | Accepted |
 | ADR-012 | 2026-09-22 | Voice turn runs in `VoicePipeline` on its own thread; every step uses `transition_from` so pause/cancel mid-turn aborts cleanly. Responder is a pluggable `str -> str` (echo in Phase 3, LLM in Phase 4) | Accepted |

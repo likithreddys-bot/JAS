@@ -37,8 +37,10 @@ class UtteranceRecorder:
         self._active = False
         self._result: np.ndarray | None = None
 
-    def begin(self) -> None:
+    def begin(self, start_timeout: float | None = None) -> None:
+        """Start capturing. `start_timeout` overrides how long to wait for speech to begin."""
         with self._lock:
+            self._current_start_timeout = self._start_timeout if start_timeout is None else start_timeout
             self._reset_vad()
             self._frames: list[np.ndarray] = []
             self._pre_roll: deque[np.ndarray] = deque(maxlen=PRE_ROLL_FRAMES)
@@ -65,7 +67,7 @@ class UtteranceRecorder:
                 self._frames = [*self._pre_roll, frame]
             else:
                 self._pre_roll.append(frame)
-                if self._elapsed >= self._start_timeout:
+                if self._elapsed >= self._current_start_timeout:
                     self._finish(None)
 
     def wait(self, timeout: float) -> np.ndarray | None:

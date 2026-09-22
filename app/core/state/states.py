@@ -33,7 +33,7 @@ TRANSITIONS: dict[JarvisState, frozenset[JarvisState]] = {
     S.PLANNING: frozenset({S.EXECUTING, S.RESPONDING, S.STANDBY}),
     S.EXECUTING: frozenset({S.OBSERVING, S.RESPONDING, S.STANDBY}),
     S.OBSERVING: frozenset({S.THINKING, S.PLANNING, S.EXECUTING, S.RESPONDING, S.STANDBY}),
-    S.RESPONDING: frozenset({S.LISTENING, S.STANDBY}),
+    S.RESPONDING: frozenset({S.EXECUTING, S.LISTENING, S.STANDBY}),
     S.ERROR: frozenset({S.STANDBY, S.SLEEPING}),
     S.SLEEPING: frozenset({S.STANDBY}),
 }

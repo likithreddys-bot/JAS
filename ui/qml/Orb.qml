@@ -6,10 +6,10 @@ import QtQuick.Shapes
 Window {
     id: root
     width: 220
-    height: 272
+    height: Math.max(272, textColumn.y + textColumn.implicitHeight + 22)
     visible: true
     color: "transparent"
-    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus
     title: "JARVIS"
 
     readonly property string uiFont: "Segoe UI Variable Display"
@@ -34,6 +34,10 @@ Window {
         NumberAnimation { to: 1; duration: root.isPaused ? 5200 : root.isError ? 900 : 3200; easing.type: Easing.InOutSine }
         NumberAnimation { to: 0; duration: root.isPaused ? 5200 : root.isError ? 900 : 3200; easing.type: Easing.InOutSine }
     }
+
+    // Grow upwards: keep the bottom edge where it was when the content changes size.
+    property real lastHeight: height
+    onHeightChanged: { y -= height - lastHeight; lastHeight = height }
 
     Component.onCompleted: {
         x = Screen.desktopAvailableWidth - width - 28
@@ -164,6 +168,7 @@ Window {
     }
 
     Column {
+        id: textColumn
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: orbArea.bottom
         anchors.topMargin: 2
@@ -199,6 +204,59 @@ Window {
             font.family: root.uiFont
             font.pixelSize: 11
             color: root.isError ? "#C98A92" : "#B4BCCB"
+        }
+
+        // Live task checklist
+        Column {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 190
+            spacing: 5
+            topPadding: bridge.steps.length > 0 ? 6 : 0
+            visible: bridge.steps.length > 0
+
+            Repeater {
+                model: bridge.steps
+                delegate: Row {
+                    required property var modelData
+                    spacing: 8
+                    width: 190
+                    opacity: 0
+                    Component.onCompleted: opacity = 1
+                    Behavior on opacity { NumberAnimation { duration: 250 } }
+
+                    Item {
+                        width: 12; height: 14
+                        Rectangle {  // pulsing dot while running
+                            anchors.centerIn: parent
+                            visible: modelData.status === "running"
+                            width: 7; height: 7; radius: 3.5
+                            color: root.accent
+                            SequentialAnimation on opacity {
+                                running: modelData.status === "running"
+                                loops: Animation.Infinite
+                                NumberAnimation { to: 0.25; duration: 450 }
+                                NumberAnimation { to: 1; duration: 450 }
+                            }
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            visible: modelData.status !== "running"
+                            text: modelData.status === "done" ? "✓" : "✕"
+                            color: modelData.status === "done" ? "#6FE3B4" : "#FF7A85"
+                            font.pixelSize: 11
+                            font.weight: Font.Bold
+                        }
+                    }
+                    Text {
+                        width: 170
+                        text: modelData.label
+                        elide: Text.ElideRight
+                        font.family: root.uiFont
+                        font.pixelSize: 11
+                        color: modelData.status === "running" ? "#E8ECF4" : "#8E97A8"
+                    }
+                }
+            }
         }
     }
 }
