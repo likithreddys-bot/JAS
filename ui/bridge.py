@@ -65,6 +65,9 @@ class UiBridge(QObject):
                 self._set_caption(event.reason or "")
             elif event.current in (JarvisState.WAKE_DETECTED, JarvisState.SLEEPING):
                 self._clear()
+            elif event.current is JarvisState.RESTING:
+                self._clear()
+                self._set_caption("Say \u201cwake up, Jarvis\u201d")
             elif event.current is JarvisState.STANDBY:
                 self._linger.start()
             self._level = 0.0

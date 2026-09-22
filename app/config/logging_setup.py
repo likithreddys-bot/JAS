@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import threading
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -69,3 +70,8 @@ def setup_logging(log_dir: Path, level: str = "INFO") -> None:
         root.critical("Uncaught exception", exc_info=(exc_type, exc, tb))
 
     sys.excepthook = _log_uncaught
+    # Background threads report crashes separately; without this they'd vanish (no console under pythonw).
+    threading.excepthook = lambda args: root.critical(
+        "Uncaught exception in thread %s", args.thread.name if args.thread else "?",
+        exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+    )

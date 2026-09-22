@@ -29,3 +29,21 @@ def test_logging_writes_json_and_routes_errors(tmp_path):
     for name in ("jarvis", "jarvis.voice"):
         for h in logging.getLogger(name).handlers:
             h.close()
+
+
+def test_crashes_in_background_threads_are_logged(tmp_path):
+    import threading
+
+    setup_logging(tmp_path, "INFO")
+
+    def boom():
+        raise RuntimeError("thread went bang")
+
+    t = threading.Thread(target=boom, name="worker")
+    t.start()
+    t.join()
+    for h in logging.getLogger("jarvis").handlers:
+        h.flush()
+    assert "thread went bang" in (tmp_path / "errors.log").read_text("utf-8")
+    for h in logging.getLogger("jarvis").handlers:
+        h.close()

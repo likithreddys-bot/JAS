@@ -20,13 +20,16 @@ IDLE_UNLOAD_SECONDS = 300
 class Transcriber:
     def __init__(self, model_size: str, models_dir: Path, language: str | None, vocabulary: str = "") -> None:
         self._model_size = model_size
-        # Whisper uses this as preceding context, which biases it towards these spellings.
-        self._hint = f"{vocabulary.strip().rstrip('.')}." if vocabulary.strip() else None
         self._models_dir = models_dir
         self._language = language or None  # None = auto-detect
         self._model = None
         self._lock = threading.Lock()
         self._unload_timer: threading.Timer | None = None
+        self.set_vocabulary(vocabulary)
+
+    def set_vocabulary(self, vocabulary: str) -> None:
+        # Whisper uses this as preceding context, which biases it towards these spellings.
+        self._hint = f"{vocabulary.strip().rstrip('.')}." if vocabulary.strip() else None
 
     def ensure_loaded(self) -> None:
         with self._lock:

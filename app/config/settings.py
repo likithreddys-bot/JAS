@@ -40,13 +40,38 @@ class Settings(BaseSettings):
     # Names and words speech recognition should expect (people, apps, places), comma-separated.
     stt_vocabulary: str = "Jarvis, Notepad, WhatsApp, VS Code, Chrome, YouTube"
 
+    # Personal
+    user_name: str = "Likki"
+    home_city: str = "Bengaluru"
+    # Start in rest mode (and rest again after the laptop wakes from sleep); "wake up Jarvis" gives the briefing.
+    start_resting: bool = True
+    # Played in your Chrome after the morning briefing (YouTube search; a different top result each day).
+    morning_music: str = "calm good morning instrumental music"
+    # Suggest a break after this many minutes of continuous screen use (0 = off).
+    break_reminder_minutes: int = 90
+
+    # Listening: seconds of silence that end your sentence, how long to wait for you to start, max length.
+    listen_end_silence: float = 1.5
+    listen_start_timeout: float = 8.0
+    listen_max_seconds: float = 30.0
+
     # After answering, keep listening this many seconds for a follow-up without the wake word (0 = off).
     follow_up_seconds: float = 6.0
+
+    # Folder JARVIS may read/write for coding help (never AppData, keys or .env files inside it).
+    files_root: Path = Path.home()
+
+    # Your Chrome profile for websites and music (name as shown in Chrome); empty = last used.
+    chrome_profile: str = ""
+    # Invisible browser used only for web research (search, reading pages).
+    browser_profile_dir: Path = PROJECT_ROOT / "data" / "browser-profile"
 
     llm_provider: str = "gemini"  # "gemini" (free tier) or "claude"
     gemini_api_key: str = ""
     # Comma-separated priority list; the next is tried if one is overloaded or unavailable.
-    gemini_model: str = "gemini-3.1-flash-lite,gemini-flash-lite-latest,gemini-3-flash-preview"
+    gemini_model: str = "gemini-3-flash-preview,gemini-3.1-flash-lite,gemini-flash-lite-latest"
+    # How much Gemini thinks before acting: minimal (fastest) / low / medium / high; empty = model default.
+    gemini_thinking: str = "minimal"
     claude_api_key: str = ""
     claude_model: str = "claude-opus-5"
 

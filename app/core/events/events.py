@@ -56,3 +56,9 @@ class ToolFinished:
     label: str
     ok: bool
     error: str = ""
+
+
+@dataclass(frozen=True)
+class TaskInterrupted:
+    """The user said the wake word (or paused) while JARVIS was busy: stop everything now."""
+    reason: str

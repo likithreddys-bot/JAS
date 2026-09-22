@@ -74,7 +74,10 @@ def computer_tools(app_index: apps.AppIndex) -> list[Tool]:
         return ToolResult(True, {"typed_into": target.title, "characters": len(text)})
 
     def press_keys(keys: str) -> ToolResult:
-        combo = keyboard.parse_combo(keys)
+        try:
+            combo = keyboard.parse_combo(keys)
+        except ValueError as exc:
+            return ToolResult(False, error=f"{exc}. Use names like enter, ctrl+s, volumeup, playpause, nexttrack.")
         target = windows.foreground_window()
         keyboard.press(combo)
         return ToolResult(True, {"pressed": "+".join(combo), "active_window": target.title if target else None})
@@ -96,7 +99,7 @@ def computer_tools(app_index: apps.AppIndex) -> list[Tool]:
     name_param = {"type": "object", "properties": {"name": {"type": "string", "description": "App or window name, e.g. 'notepad', 'chrome', 'whatsapp'"}}, "required": ["name"]}
 
     return [
-        Tool("open_application", "Open an installed application by name (e.g. Notepad, Chrome, VS Code, WhatsApp, Calculator, Settings).",
+        Tool("open_application", "Open an installed application by name (e.g. Notepad, VS Code, WhatsApp, Calculator, Settings). For Google Chrome use open_chrome instead.",
              name_param, open_application, lambda name: f"Opening {name}"),
         Tool("list_open_windows", "List the open application windows and which one is active.",
              {"type": "object", "properties": {}}, list_open_windows, lambda: "Checking open windows"),

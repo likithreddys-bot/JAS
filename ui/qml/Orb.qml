@@ -13,7 +13,7 @@ Window {
     title: "JARVIS"
 
     readonly property string uiFont: "Segoe UI Variable Display"
-    readonly property bool isPaused: bridge.state === "sleeping"
+    readonly property bool isPaused: bridge.state === "sleeping" || bridge.state === "resting"  // calm, still orb
     readonly property bool isBusy: ["thinking", "planning", "executing", "observing", "transcribing"].indexOf(bridge.state) >= 0
     readonly property bool isError: bridge.state === "error"
     readonly property bool isListening: bridge.state === "listening"

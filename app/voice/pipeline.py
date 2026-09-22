@@ -13,7 +13,14 @@ from typing import Callable, Iterable, Iterator, Protocol
 
 import numpy as np
 
-from app.core.events.events import AssistantReply, AudioLevel, StateChanged, TranscriptReady
+from app.core.events.events import (
+    AssistantReply,
+    AudioLevel,
+    StateChanged,
+    TaskInterrupted,
+    ToolStarted,
+    TranscriptReady,
+)
 from app.core.jarvis import Jarvis
 from app.brain.sentences import sentences
 from app.core.state.states import JarvisState as S
@@ -25,6 +32,15 @@ log = logging.getLogger("jarvis.voice.pipeline")
 ACK_PHRASE = "Yes?"
 NOT_UNDERSTOOD = "Sorry, I didn't catch that."
 FAILURE_PHRASE = "Sorry, something went wrong."
+STOPPED_PHRASE = "Okay, stopped."
+WORKING_PHRASE = "On it."  # said as soon as the first action starts, so the user isn't left in silence
+CONTINUE_SECONDS = 3.0  # extra listening when the user seems mid-sentence
+MAX_CONTINUATIONS = 2
+# A sentence ending like this is probably unfinished ("play some...", "open the...", "uhm").
+_UNFINISHED = re.compile(r"(\.\.\.|,|\b(and|or|but|so|because|the|a|an|to|of|for|with|my|some|"
+                         r"uh|um|uhm|hmm|mm|like|also))\W*$", re.I)
+TODO_REQUEST = ("The user just told you their to-do list for today: \"{heard}\". Save each separate task "
+                "with add_todo, then confirm in one short sentence.")
 # Handled locally, without the LLM: end the turn quietly.
 CANCEL_PHRASES = {"cancel", "never mind", "nevermind", "stop", "nothing", "forget it"}
 YES_WORDS = {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "confirm", "go", "do", "please", "haan", "ha", "correct"}
@@ -50,6 +66,10 @@ class VoicePipeline:
         transcriber: TranscriberLike,
         recorder: UtteranceRecorder,
         respond: Callable[[str], Iterable[str]],
+        quick: Callable[[str], str | None] | None = None,
+        on_exchange: Callable[[str, str], None] = lambda user, reply: None,
+        briefing: Callable[[], str] | None = None,
+        after_briefing: Callable[[], str] | None = None,
         max_listen_seconds: float = 15.0,
         follow_up_seconds: float = 0.0,
     ) -> None:
@@ -58,10 +78,17 @@ class VoicePipeline:
         self._stt = transcriber
         self._recorder = recorder
         self._respond = respond
+        self._quick = quick  # instant commands (media/volume) that skip the LLM
+        self._on_exchange = on_exchange  # e.g. log to long-term memory
+        self._briefing = briefing  # what to say when woken from rest
+        self._after_briefing = after_briefing  # e.g. start morning music; returns a closing line
         self._max_wait = max_listen_seconds + LISTEN_WAIT_SLACK
         self._follow_up_seconds = follow_up_seconds
-        self._turns: queue.Queue[None] = queue.Queue()
+        self._turns: queue.Queue[str] = queue.Queue()
         core.bus.subscribe(StateChanged, self._on_state)
+        core.bus.subscribe(TaskInterrupted, self._on_interrupt)
+        core.bus.subscribe(ToolStarted, self._on_tool_started)
+        self._working_ack_armed = False
         threading.Thread(target=self._worker, name="voice-pipeline", daemon=True).start()
 
     def feed(self, frame: np.ndarray) -> None:
@@ -72,38 +99,78 @@ class VoicePipeline:
 
     def _on_state(self, event: StateChanged) -> None:
         if event.current is S.WAKE_DETECTED:
-            self._turns.put(None)
+            if event.previous is S.RESTING and self._briefing:
+                self._turns.put("briefing")
+            elif event.reason == "announcement":
+                self._turns.put("announcement")
+            else:
+                self._turns.put("request")
         elif event.current is S.SLEEPING:
             self._speaker.stop()
             self._recorder.cancel()
 
+    def _on_tool_started(self, event: ToolStarted) -> None:
+        # Runs on the pipeline thread just before the first tool of a reply: a quick "On it."
+        if self._working_ack_armed:
+            self._working_ack_armed = False
+            self._speaker.speak(WORKING_PHRASE)
+
+    def _on_interrupt(self, event: TaskInterrupted) -> None:
+        self._speaker.stop()
+        self._recorder.cancel()
+
     def _worker(self) -> None:
         while True:
-            self._turns.get()
+            kind = self._turns.get()
+            self._core.cancelled.clear()  # new request; any earlier one has fully unwound
             try:
-                self._turn()
+                self._turn(kind)
             except TaskCancelled:
                 log.info("Task cancelled by user")
             except Exception as exc:
-                log.exception("Voice turn failed")
-                self._fail(str(exc) or type(exc).__name__)
-                try:
-                    self._speaker.speak(FAILURE_PHRASE)
-                except Exception:
-                    log.exception("Could not speak the failure message")
+                if self._core.cancelled.is_set():
+                    log.info("Task stopped by user (%s)", type(exc).__name__)
+                else:
+                    log.exception("Voice turn failed")
+                    self._fail(str(exc) or type(exc).__name__)
+                    self._say(FAILURE_PHRASE)
+            if self._core.cancelled.is_set() and self._core.state.current is S.STANDBY:
+                self._say(STOPPED_PHRASE)
 
-    def _turn(self) -> None:
+    def _say(self, phrase: str) -> None:
+        try:
+            self._speaker.speak(phrase)
+        except Exception:
+            log.exception("Could not speak %r", phrase)
+
+    def _turn(self, kind: str = "request") -> None:
         state = self._core.state
         # Load speech-to-text while we say "Yes?" and the user talks, hiding the load time.
         threading.Thread(target=self._preload_stt, name="stt-preload", daemon=True).start()
 
-        self._speaker.speak(ACK_PHRASE)
-        self._recorder.begin()
-        if not state.transition_from(S.WAKE_DETECTED, S.LISTENING):
-            self._recorder.cancel()
-            return
+        if kind == "request":
+            self._speaker.speak(ACK_PHRASE)
+            self._recorder.begin()
+            if not state.transition_from(S.WAKE_DETECTED, S.LISTENING):
+                self._recorder.cancel()
+                return
+            follow_up = False
+        else:  # JARVIS speaks first: morning briefing, or an announcement such as a break reminder
+            text = self._briefing() if kind == "briefing" else (self._core.announcement or "")
+            self._core.announcement = None
+            if not text or not state.transition_from(S.WAKE_DETECTED, S.RESPONDING):
+                state.transition_from(S.WAKE_DETECTED, S.STANDBY)
+                return
+            self._core.bus.publish(AssistantReply(text))
+            if not self._speaker.speak(text):
+                return
+            if kind == "briefing":
+                self._briefing_todos()
+                return
+            if not self._listen_again(self._follow_up_seconds or 8.0):
+                return
+            follow_up = True
 
-        follow_up = False
         while True:
             audio = self._recorder.wait(self._max_wait)
             if audio is None:
@@ -111,29 +178,84 @@ class VoicePipeline:
                 return
             if not state.transition_from(S.LISTENING, S.TRANSCRIBING):
                 return
-            if not self._answer(self._stt.transcribe(audio), follow_up):
+            if not self._answer(self._transcribe_whole_thought(audio), follow_up):
+                return
+            if self._core.rest_requested:  # "go offline" was the request
+                self._go_rest()
                 return
             # Follow-up mode: keep listening briefly so the user can continue without the wake word.
-            if not self._follow_up_seconds or not self._enter_responding():
+            if not self._follow_up_seconds or not self._listen_again(self._follow_up_seconds):
                 break
-            self._recorder.begin(start_timeout=self._follow_up_seconds)
-            if not state.transition_from(S.RESPONDING, S.LISTENING):
-                self._recorder.cancel()
-                return
             follow_up = True
         for current in (S.RESPONDING, S.OBSERVING):
             if state.transition_from(current, S.STANDBY):
                 break
 
-    def _answer(self, text: str, follow_up: bool) -> bool:
-        """Handle one transcribed request. Returns True if a reply was spoken (conversation continues)."""
+    def _transcribe_whole_thought(self, audio: np.ndarray) -> str:
+        """Transcribe; if it sounds unfinished (the user paused to think), keep listening and append."""
+        state = self._core.state
+        text = self._stt.transcribe(audio)
+        for _ in range(MAX_CONTINUATIONS):
+            if not text or not _UNFINISHED.search(text):
+                break
+            log.info("Sounds unfinished (%r); listening for more", text)
+            self._core.bus.publish(TranscriptReady(text))
+            self._recorder.begin(start_timeout=CONTINUE_SECONDS)
+            if not state.transition_from(S.TRANSCRIBING, S.LISTENING):
+                self._recorder.cancel()
+                break
+            more = self._recorder.wait(self._max_wait)
+            if not state.transition_from(S.LISTENING, S.TRANSCRIBING) or more is None:
+                break
+            text = f"{text.rstrip('.… ')} {self._stt.transcribe(more)}".strip()
+        return text
+
+    def _listen_again(self, seconds: float) -> bool:
+        """After speaking, listen for up to `seconds` for the user to answer (no wake word needed)."""
+        if not self._enter_responding():
+            return False
+        self._recorder.begin(start_timeout=seconds)
+        if not self._core.state.transition_from(S.RESPONDING, S.LISTENING):
+            self._recorder.cancel()
+            return False
+        return True
+
+    def _go_rest(self) -> None:
+        self._core.rest_requested = False
+        if self._enter_responding():
+            self._core.state.transition_from(S.RESPONDING, S.RESTING, "going offline")
+
+    def _briefing_todos(self) -> None:
+        """After the morning briefing: take today's to-do list, then start the day (e.g. music)."""
+        state = self._core.state
+        if not self._listen_again(10.0):
+            return
+        audio = self._recorder.wait(self._max_wait)
+        if not state.transition_from(S.LISTENING, S.TRANSCRIBING):
+            return
+        heard = self._stt.transcribe(audio).strip() if audio is not None else ""
+        if heard:
+            if not self._answer(heard, follow_up=False, prompt=TODO_REQUEST.format(heard=heard)):
+                return
+        elif not state.transition_from(S.TRANSCRIBING, S.THINKING):
+            return
+        closing = self._after_briefing() if self._after_briefing else ""
+        if closing and self._enter_responding():
+            self._core.bus.publish(AssistantReply(closing))
+            self._speaker.speak(closing)
+        for current in (S.RESPONDING, S.THINKING, S.OBSERVING):
+            if state.transition_from(current, S.STANDBY):
+                break
+
+    def _answer(self, text: str, follow_up: bool, prompt: str | None = None) -> bool:
+        """Handle one transcribed request. Returns True if a reply was spoken (conversation continues).
+
+        `prompt` overrides what is sent to the LLM (the user's words are still shown and logged).
+        """
         state = self._core.state
         log.info("Heard: %r", text)
         self._core.bus.publish(TranscriptReady(text))
 
-        if _normalize(text) in CANCEL_PHRASES:
-            state.transition_from(S.TRANSCRIBING, S.STANDBY, "cancelled by user")
-            return False
         if not text:
             if follow_up:  # probably background noise after the reply; end quietly
                 state.transition_from(S.TRANSCRIBING, S.STANDBY, "no follow-up")
@@ -145,8 +267,24 @@ class VoicePipeline:
         if not state.transition_from(S.TRANSCRIBING, S.THINKING):
             return False
 
+        if self._quick:  # instant media/volume commands skip the LLM
+            reply = self._quick(text)
+            if reply is not None:
+                if not self._enter_responding():
+                    return False
+                self._core.bus.publish(AssistantReply(reply))
+                self._on_exchange(text, reply)
+                return self._speaker.speak(reply)
+        if _normalize(text) in CANCEL_PHRASES:
+            for current in (S.THINKING, S.OBSERVING):
+                if state.transition_from(current, S.STANDBY, "cancelled by user"):
+                    break
+            return False
+
         spoken = ""
-        for sentence in sentences(self._respond(text)):
+        self._working_ack_armed = True
+        for sentence in sentences(self._respond(prompt or text)):
+            self._working_ack_armed = False  # the reply itself is starting
             # Tools may have moved us to EXECUTING/OBSERVING between sentences.
             if not self._enter_responding():
                 return False  # paused / cancelled mid-reply
@@ -154,8 +292,10 @@ class VoicePipeline:
             self._core.bus.publish(AssistantReply(spoken))
             if not self._speaker.speak(sentence):
                 return False
+        self._working_ack_armed = False
         if not spoken:
             raise RuntimeError("Empty reply")
+        self._on_exchange(text, spoken)
         return True
 
     def ask_yes_no(self, question: str) -> bool:

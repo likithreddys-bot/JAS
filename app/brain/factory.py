@@ -13,12 +13,17 @@ log = logging.getLogger("jarvis.agent")
 Responder = Callable[[str], Iterable[str]]
 
 
-def create_responder(settings: Settings, executor: ToolExecutor | None = None) -> Responder:
+def create_responder(
+    settings: Settings, executor: ToolExecutor | None = None, memory: Callable[[], str] = lambda: ""
+) -> Responder:
     provider = settings.llm_provider.strip().lower()
     if provider == "gemini":
         from app.brain.gemini import GeminiBrain
 
-        return GeminiBrain(settings.gemini_api_key, settings.gemini_model, executor).reply
+        return GeminiBrain(
+            settings.gemini_api_key, settings.gemini_model, executor, settings.gemini_thinking,
+            settings.user_name, memory,
+        ).reply
     if provider == "claude":
         from app.brain.claude import ClaudeBrain
 

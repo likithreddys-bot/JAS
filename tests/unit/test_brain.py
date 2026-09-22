@@ -151,3 +151,13 @@ def test_gemini_stops_after_too_many_tool_steps():
     call = types.Part(function_call=types.FunctionCall(name="list_open_windows", args={}))
     brain, _ = _brain_with({"busy-model": [[call] for _ in range(MAX_TOOL_STEPS + 1)], "good-model": []}, ToolExecutor(core, [tool]))
     assert "".join(brain.reply("loop forever")) == TOO_MANY_STEPS
+
+
+def test_rate_limited_model_is_skipped_for_a_while():
+    from google.genai import errors
+
+    limited = errors.ClientError(429, {"error": {"code": 429, "message": "quota", "status": "RESOURCE_EXHAUSTED"}})
+    brain, calls = _brain_with({"busy-model": limited, "good-model": ["Hi."]})
+    assert "".join(brain.reply("one")) == "Hi."
+    assert "".join(brain.reply("two")) == "Hi."
+    assert calls == ["busy-model", "good-model", "good-model"]  # not retried on the 2nd request

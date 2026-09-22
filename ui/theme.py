@@ -18,6 +18,7 @@ STATE_COLORS: dict[JarvisState, str] = {
     S.RESPONDING: "#A879FF",
     S.ERROR: "#FF5C6C",
     S.SLEEPING: "#5B6275",
+    S.RESTING: "#4F4FB0",
 }
 
 STATE_LABELS: dict[JarvisState, str] = {
@@ -33,4 +34,5 @@ STATE_LABELS: dict[JarvisState, str] = {
     S.RESPONDING: "Speaking",
     S.ERROR: "Something went wrong",
     S.SLEEPING: "Paused",
+    S.RESTING: "Resting",
 }

@@ -74,7 +74,7 @@ class ToolExecutor:
         return result.to_dict()
 
     def _check_not_cancelled(self) -> None:
-        if self._core.state.current in (S.SLEEPING, S.STANDBY):
+        if self._core.cancelled.is_set() or self._core.state.current in (S.SLEEPING, S.STANDBY):
             raise TaskCancelled()
 
 

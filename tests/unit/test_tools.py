@@ -104,6 +104,9 @@ def test_crashing_tool_becomes_an_error_result():
 def test_key_combos_parse_and_flag_danger():
     assert keyboard.parse_combo("Ctrl + S") == ("ctrl", "s")
     assert keyboard.parse_combo("volume up") == ("volumeup",)
+    assert keyboard.parse_combo("media_play_pause") == ("playpause",)
+    assert keyboard.parse_combo("Volume_Up") == ("volumeup",)
+    assert keyboard.parse_combo("media next track") == ("nexttrack",)
     assert keyboard.is_dangerous(keyboard.parse_combo("alt+f4"))
     assert not keyboard.is_dangerous(keyboard.parse_combo("ctrl+s"))
     with pytest.raises(ValueError):
@@ -142,3 +145,15 @@ def test_window_listing_works_on_this_machine():
     listed = windows.list_windows()
     assert all(w.title for w in listed)
     assert all(w.hwnd for w in listed)
+
+
+def test_interrupted_task_runs_no_more_tools():
+    core = thinking_core()
+    ran = []
+    executor = ToolExecutor(core, [make_tool(run=lambda text: ran.append(text) or ToolResult(True))])
+    core.cancelled.set()  # user said "Jarvis, stop"
+    core.state.transition(S.STANDBY)
+    core.state.transition(S.WAKE_DETECTED)  # ...and even if a new request has already begun
+    with pytest.raises(TaskCancelled):
+        executor.run("echo", {"text": "x"})
+    assert ran == []

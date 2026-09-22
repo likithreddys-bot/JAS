@@ -19,5 +19,18 @@ google-genai>=2.24,<3
 pyautogui>=0.9.54,<1
 mss>=10,<11
 
+# Phase 6 — Browser (drives the installed Google Chrome; no browser download)
+playwright>=1.63,<2
+ytmusicapi>=1.12,<2
+winrt-runtime>=3.2,<4
+winrt-Windows.Media.Control>=3.2,<4
+winrt-Windows.Foundation>=3.2,<4
+winrt-Windows.Foundation.Collections>=3.2,<4
+
+# Music ducking, coding help, screen vision
+pycaw>=20250101
+pillow>=12,<13
+Send2Trash>=2,<3
+
 # Dev / tests
 pytest>=9.1

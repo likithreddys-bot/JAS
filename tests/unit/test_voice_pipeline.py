@@ -1,3 +1,4 @@
+import pytest
 import threading
 import time
 
@@ -296,3 +297,198 @@ def test_noise_during_follow_up_ends_quietly():
     speak_into(pipeline, [SPEECH] * 2 + [SILENCE] * 10)
     assert wait_for(lambda: core.state.current is S.STANDBY)
     assert NOT_UNDERSTOOD not in speaker.said  # no "Sorry, I didn't catch that" for noise
+
+
+def test_wake_word_while_thinking_stops_the_task():
+    from app.core.events.events import WakeWordDetected
+    from app.voice.pipeline import STOPPED_PHRASE
+
+    core = Jarvis()
+    speaker, stt = FakeSpeaker(), FakeTranscriber("write me a long essay")
+    release = threading.Event()
+
+    def slow_respond(text):
+        release.wait(3)  # the LLM is still thinking...
+        yield "This should never be spoken."
+
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=slow_respond, max_listen_seconds=3)
+    core.start()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
+    assert wait_for(lambda: core.state.current is S.THINKING)
+
+    core.bus.publish(WakeWordDetected(0.9))  # "Jarvis, stop!"
+    assert core.state.current is S.STANDBY
+    release.set()
+    assert wait_for(lambda: speaker.said[-1:] == [STOPPED_PHRASE])
+    assert "This should never be spoken." not in speaker.said
+
+
+def test_wake_word_while_speaking_cuts_speech():
+    from app.core.events.events import WakeWordDetected
+
+    core = Jarvis()
+    speaker, stt = FakeSpeaker(), FakeTranscriber("tell me a story")
+    started = threading.Event()
+
+    def long_speak(text):
+        speaker.said.append(text)
+        if text.startswith("Once"):
+            started.set()
+            return not speaker.stopped.wait(3)  # interrupted -> False
+        return True
+
+    speaker.speak = long_speak
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(),
+                             respond=lambda t: iter(["Once upon a time there was a king.", "He had a dragon."]),
+                             max_listen_seconds=3)
+    core.start()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
+    assert started.wait(3)
+    core.bus.publish(WakeWordDetected(0.9))
+    assert speaker.stopped.is_set()
+    assert wait_for(lambda: speaker.said[-1] == "Okay, stopped.")
+    assert "He had a dragon." not in speaker.said
+
+
+def test_instant_media_command_skips_the_llm():
+    from app.voice import quick
+
+    core = Jarvis()
+    speaker, stt = FakeSpeaker(), FakeTranscriber("Stop the song")
+    llm_calls, tool_calls = [], []
+
+    def run_tool(name, args):
+        tool_calls.append((name, args))
+        return {"ok": True, "title": "Paaro"}
+
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=lambda t: llm_calls.append(t) or iter(()),
+                             quick=lambda text: quick.run(text, run_tool), max_listen_seconds=3)
+    core.start()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
+    assert wait_for(lambda: speaker.said[-1:] == ["Paused."] and core.state.current is S.STANDBY)
+    assert tool_calls == [("media_control", {"action": "pause"})] and llm_calls == []
+
+
+def test_go_offline_then_wake_up_gives_briefing_takes_todos_and_starts_the_day():
+    from app.core.events.events import WakeWordDetected
+    from app.voice import quick
+
+    core = Jarvis()
+    speaker = FakeSpeaker()
+    heard = iter(["go offline", "finish the BERT model and call Rahul"])
+    stt = FakeTranscriber("")
+    stt.transcribe = lambda audio: next(heard)
+    prompts = []
+
+    def run_tool(name, args):
+        if name == "go_offline":
+            core.rest_requested = True
+        return {"ok": True}
+
+    def respond(prompt):
+        prompts.append(prompt)
+        yield "Added both to your list."
+
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=respond,
+                             quick=lambda text: quick.run(text, run_tool), max_listen_seconds=3, follow_up_seconds=0.6,
+                             briefing=lambda: "Hey, hi Likki! What's on your to-do list for today?",
+                             after_briefing=lambda: "Enjoy your day, Likki.")
+    core.start()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)  # "go offline"
+    assert wait_for(lambda: core.state.current is S.RESTING)
+    assert speaker.said[-1].startswith("Going offline")
+
+    core.bus.publish(WakeWordDetected(0.9))  # "wake up, Jarvis"
+    assert wait_for(lambda: speaker.said[-1] == "Hey, hi Likki! What's on your to-do list for today?")
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)  # the to-do list
+    assert wait_for(lambda: core.state.current is S.STANDBY)
+    assert "finish the BERT model and call Rahul" in prompts[0] and "add_todo" in prompts[0]
+    assert speaker.said[-2:] == ["Added both to your list.", "Enjoy your day, Likki."]
+
+
+def test_break_reminder_is_spoken_and_the_answer_handled():
+    core = Jarvis()
+    speaker, stt = FakeSpeaker(), FakeTranscriber("okay let's continue")
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=lambda t: iter(["Great, let's keep going."]),
+                             max_listen_seconds=3, follow_up_seconds=0.6)
+    core.start()
+    assert core.announce("Likki, your screen time is high. Take a break, or shall we continue?")
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    assert speaker.said == ["Likki, your screen time is high. Take a break, or shall we continue?"]  # no "Yes?"
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
+    assert wait_for(lambda: speaker.said[-1] == "Great, let's keep going.")
+
+
+def test_real_transcriber_builds_and_updates_its_vocabulary(tmp_path):
+    from app.voice.stt.transcriber import Transcriber
+
+    stt = Transcriber("small", tmp_path, "en")  # no model is loaded until first use
+    assert stt._hint is None
+    stt.set_vocabulary("Jarvis, Likki")
+    assert stt._hint == "Jarvis, Likki."
+
+
+@pytest.mark.parametrize("text, unfinished", [
+    ("Play some.", True), ("Open YouTube music and", True), ("Skip the video. Add the", True),
+    ("Search for", True), ("Uhm...", True), ("So there is a Python question on my screen, and", True),
+    ("Open Notepad please.", False), ("Explain this.", False), ("Turn it on.", False),
+    ("What's the weather?", False), ("Play Sahiba.", False),
+])
+def test_unfinished_sentence_detection(text, unfinished):
+    from app.voice.pipeline import _UNFINISHED
+
+    assert bool(_UNFINISHED.search(text)) is unfinished
+
+
+def test_pausing_to_think_does_not_cut_the_user_off():
+    core = Jarvis()
+    speaker = FakeSpeaker()
+    parts = iter(["Play some.", "nice Hindi song."])
+    stt = FakeTranscriber("")
+    stt.transcribe = lambda audio: next(parts)
+    requests = []
+
+    def respond(text):
+        requests.append(text)
+        yield "Playing a Hindi song."
+
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=respond, max_listen_seconds=3)
+    heard = []
+    core.bus.subscribe(TranscriptReady, lambda e: heard.append(e.text))
+    core.start()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)  # "Play some." ... (thinking)
+    assert wait_for(lambda: heard == ["Play some."] and core.state.current is S.LISTENING)  # listening again
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)  # "nice Hindi song."
+    assert wait_for(lambda: requests == ["Play some nice Hindi song."])
+
+
+def test_says_on_it_when_work_starts():
+    from app.core.events.events import ToolStarted
+    from app.voice.pipeline import WORKING_PHRASE
+
+    core = Jarvis()
+    speaker, stt = FakeSpeaker(), FakeTranscriber("open notepad")
+
+    def respond(text):
+        core.bus.publish(ToolStarted(1, "Opening notepad"))  # what the executor does before a tool
+        core.bus.publish(ToolStarted(2, "Typing"))
+        yield "Done, Notepad is open."
+
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=respond, max_listen_seconds=3)
+    core.start()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
+    assert wait_for(lambda: core.state.current is S.STANDBY)
+    assert speaker.said == ["Yes?", WORKING_PHRASE, "Done, Notepad is open."]  # "On it." once, before the work

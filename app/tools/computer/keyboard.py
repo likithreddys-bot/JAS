@@ -39,7 +39,9 @@ kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
 KEY_ALIASES = {"control": "ctrl", "windows": "win", "escape": "esc", "return": "enter", "del": "delete",
                "page up": "pageup", "page down": "pagedown", "volume up": "volumeup",
                "volume down": "volumedown", "mute": "volumemute", "play": "playpause", "pause": "playpause",
-               "next": "nexttrack", "previous": "prevtrack"}
+               "next": "nexttrack", "previous": "prevtrack", "play pause": "playpause",
+               "next track": "nexttrack", "previous track": "prevtrack", "prev track": "prevtrack",
+               "stop": "stop", "space bar": "space", "spacebar": "space"}
 # Combos that can destroy work or close things: need confirmation.
 DANGEROUS_COMBOS = {("alt", "f4"), ("ctrl", "w"), ("ctrl", "shift", "w"), ("delete",), ("shift", "delete")}
 
@@ -82,16 +84,16 @@ def enter_text(text: str) -> None:
     if not _clipboard_is_text_or_empty():
         type_unicode(text)
         return
-    previous = _get_clipboard_text()
-    _set_clipboard_text(text.replace("\n", "\r\n"))
+    previous = get_clipboard_text()
+    set_clipboard_text(text.replace("\n", "\r\n"))
     time.sleep(SETTLE_DELAY)
     pyautogui.hotkey("ctrl", "v")
     time.sleep(PASTE_SETTLE)  # the app reads the clipboard asynchronously
     if previous is not None:
-        _set_clipboard_text(previous)
+        set_clipboard_text(previous)
 
 
-def _get_clipboard_text() -> str | None:
+def get_clipboard_text() -> str | None:
     if not _open_clipboard():
         return None
     try:
@@ -107,7 +109,7 @@ def _get_clipboard_text() -> str | None:
         user32.CloseClipboard()
 
 
-def _set_clipboard_text(text: str) -> None:
+def set_clipboard_text(text: str) -> None:
     data = text.encode("utf-16-le") + b"\x00\x00"
     handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(data))
     pointer = kernel32.GlobalLock(handle)
@@ -149,7 +151,9 @@ def parse_combo(keys: str) -> tuple[str, ...]:
     """"Ctrl + S" -> ("ctrl", "s"). Raises ValueError for unknown keys."""
     parts = []
     for raw in keys.lower().replace(" + ", "+").split("+"):
-        key = KEY_ALIASES.get(raw.strip(), raw.strip().replace(" ", ""))
+        # "media_play_pause", "Volume_Up", "media next track" -> our names
+        spoken = " ".join(raw.replace("_", " ").replace("-", " ").split()).removeprefix("media ")
+        key = KEY_ALIASES.get(spoken, spoken.replace(" ", ""))
         if key not in pyautogui.KEYBOARD_KEYS:
             raise ValueError(f"unknown key {raw.strip()!r}")
         parts.append(key)

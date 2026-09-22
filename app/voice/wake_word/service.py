@@ -18,7 +18,7 @@ from app.core.events.events import (
     StateChanged,
     WakeWordDetected,
 )
-from app.core.state.states import JarvisState
+from app.core.state.states import BUSY_STATES, JarvisState
 from app.voice.audio.microphone import Microphone, MicrophoneError
 from app.voice.wake_word.detector import WakeWordDetector
 
@@ -60,7 +60,7 @@ class WakeWordService:
 
     def _on_state(self, event: StateChanged) -> None:
         self._state = event.current
-        if event.current is JarvisState.STANDBY:
+        if event.current in (JarvisState.STANDBY, JarvisState.RESTING):
             self._reset_pending = True  # forget audio buffered before we became ready
         self._wake.set()
 
@@ -103,8 +103,8 @@ class WakeWordService:
             if self._state is JarvisState.LISTENING and self._listen_sink:
                 self._listen_sink(frame)
                 continue
-            if self._state is not JarvisState.STANDBY:
-                continue
+            if self._state not in (JarvisState.STANDBY, JarvisState.RESTING) and self._state not in BUSY_STATES:
+                continue  # e.g. LISTENING: the user is talking to us, not calling us
             if self._reset_pending:
                 self._reset_pending = False
                 self._detector.reset()

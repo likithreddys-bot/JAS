@@ -188,3 +188,20 @@ def test_porcupine_without_key_is_a_clear_error():
 
     with pytest.raises(ValueError, match="PICOVOICE_ACCESS_KEY"):
         load_porcupine("", "jarvis", 0.5)
+
+
+def test_wake_word_is_heard_while_busy_and_interrupts():
+    from app.core.events.events import TaskInterrupted
+
+    core = Jarvis()
+    core.start()
+    for s in (S.WAKE_DETECTED, S.LISTENING, S.TRANSCRIBING, S.THINKING, S.EXECUTING):
+        core.state.transition(s)
+    interrupts = []
+    core.bus.subscribe(TaskInterrupted, interrupts.append)
+    svc = run_service(core, FakeMic(), [0.0] * 3 + [0.95])
+    try:
+        assert wait_for(lambda: interrupts and core.state.current is S.STANDBY)
+        assert interrupts[0].reason == "stopped by user" and core.cancelled.is_set()
+    finally:
+        svc.stop()

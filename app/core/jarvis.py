@@ -2,11 +2,17 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from app.core.events.bus import EventBus
-from app.core.events.events import MicrophoneRecovered, MicrophoneUnavailable, WakeWordDetected
+from app.core.events.events import (
+    MicrophoneRecovered,
+    MicrophoneUnavailable,
+    TaskInterrupted,
+    WakeWordDetected,
+)
 from app.core.state.machine import StateMachine
-from app.core.state.states import JarvisState
+from app.core.state.states import BUSY_STATES, JarvisState
 
 log = logging.getLogger("jarvis.core")
 
@@ -15,13 +21,30 @@ class Jarvis:
     def __init__(self, bus: EventBus | None = None) -> None:
         self.bus = bus or EventBus()
         self.state = StateMachine(self.bus)
+        # Set when the user interrupts; checked by the executor and pipeline between steps.
+        self.cancelled = threading.Event()
+        self.rest_requested = False  # rest once the current reply has been spoken
+        self.announcement: str | None = None  # something JARVIS starts saying by itself
         self.bus.subscribe(WakeWordDetected, self._on_wake_word)
         self.bus.subscribe(MicrophoneUnavailable, self._on_mic_unavailable)
         self.bus.subscribe(MicrophoneRecovered, self._on_mic_recovered)
 
-    def start(self) -> None:
+    def start(self, resting: bool = False) -> None:
         log.info("JARVIS starting")
         self.state.transition(JarvisState.STANDBY)
+        if resting:
+            self.rest("started")
+
+    def rest(self, reason: str = "going offline") -> bool:
+        """Go quiet: only the wake word is listened for, and it wakes JARVIS with a briefing."""
+        return self.state.transition_from(JarvisState.STANDBY, JarvisState.RESTING, reason)
+
+    def announce(self, text: str) -> bool:
+        """Start speaking on JARVIS's own initiative (e.g. a break reminder). Only when idle."""
+        if self.state.current is not JarvisState.STANDBY:
+            return False
+        self.announcement = text
+        return self.state.transition_from(JarvisState.STANDBY, JarvisState.WAKE_DETECTED, "announcement")
 
     @property
     def paused(self) -> bool:
@@ -31,8 +54,7 @@ class Jarvis:
         if self.paused:
             return
         if self.state.current not in (JarvisState.STANDBY, JarvisState.ERROR):
-            # Later phases cancel the running task here before standing down.
-            self.state.transition(JarvisState.STANDBY, "paused by user")
+            self.interrupt("paused by user")
         self.state.transition(JarvisState.SLEEPING, "paused by user")
 
     def resume(self) -> None:
@@ -45,8 +67,22 @@ class Jarvis:
         else:
             self.pause()
 
+    def interrupt(self, reason: str) -> None:
+        """Stop whatever JARVIS is doing: cancel the task, stop speaking, return to standby."""
+        log.info("Interrupted: %s", reason)
+        self.cancelled.set()
+        self.bus.publish(TaskInterrupted(reason))
+        current = self.state.current
+        if current in BUSY_STATES or current in (JarvisState.WAKE_DETECTED, JarvisState.LISTENING):
+            self.state.transition_from(current, JarvisState.STANDBY, reason)
+
     def _on_wake_word(self, event: WakeWordDetected) -> None:
-        self.state.transition_from(JarvisState.STANDBY, JarvisState.WAKE_DETECTED)
+        if self.state.transition_from(JarvisState.STANDBY, JarvisState.WAKE_DETECTED):
+            return
+        if self.state.transition_from(JarvisState.RESTING, JarvisState.WAKE_DETECTED, "waking up"):
+            return
+        if self.state.current in BUSY_STATES:  # "Jarvis, stop!" while it's working or talking
+            self.interrupt("stopped by user")
 
     def _on_mic_unavailable(self, event: MicrophoneUnavailable) -> None:
         if self.state.current not in (JarvisState.ERROR, JarvisState.SLEEPING):
