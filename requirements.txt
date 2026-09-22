@@ -1,0 +1,18 @@
+# Phase 1 — Foundation
+PySide6>=6.11,<6.12
+pydantic-settings>=2.15,<3
+
+# Phase 2 — Wake word
+openwakeword==0.6.0
+sounddevice>=0.5,<0.6
+
+# Phase 3 — Voice (speech-to-text, text-to-speech)
+faster-whisper>=1.2,<2
+piper-tts>=1.8,<2
+
+# Phase 4 — LLM
+anthropic>=1.7,<2
+google-genai>=2.24,<3
+
+# Dev / tests
+pytest>=9.1

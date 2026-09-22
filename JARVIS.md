@@ -1,0 +1,432 @@
+# JARVIS — Personal Desktop AI Agent
+
+> **This is the master document of the project.** It defines what JARVIS is, how it is built, and in what order.
+> Every design decision, feature, and phase traces back to this file. If code and this file disagree, one of them must be updated deliberately — never silently.
+
+- **Platform:** Windows 11 (first-class). Architecture must stay portable to macOS/Linux later.
+- **Language:** Python 3.12+
+- **Status tracker:** see [§ 12 Roadmap & Status](#12-roadmap--status)
+- **Decisions log:** see [§ 14 Architecture Decision Records](#14-architecture-decision-records-adr)
+
+---
+
+## 1. Vision
+
+JARVIS is **not a chatbot**. It is a real personal AI companion that lives on the laptop — a modern, intelligent operating layer for the computer with voice, vision, memory, reasoning, computer control, browser control, scheduling, Google integrations, and a premium desktop UI.
+
+It will eventually be able to:
+
+- Listen to voice and detect **"Hey Jarvis"** locally
+- Understand natural language, answer questions, keep conversational context
+- See and understand the screen
+- Control the computer (apps, keyboard, mouse, windows) through safe tools
+- Control Chrome (navigate, search, play music/videos) via Playwright
+- Create notes, remember information, set reminders
+- Work with Google Calendar, Contacts, Meet, Gmail, Drive
+- Execute multi-step tasks, observe results, recover from failures
+- Maintain long-term memory
+- Speak responses back
+- **Show everything it is doing** through a beautiful desktop UI — never a black box
+
+### The target experience
+
+```text
+                 JARVIS
+        ●
+     Listening...
+
+You:    "Hey Jarvis."
+JARVIS: "Yes?"
+You:    "Open Chrome and play Sahiba."
+
+        🧠 Understanding
+        ✓ Chrome opened
+        ✓ YouTube opened
+        ✓ Searching Sahiba
+        ✓ Playing result
+
+JARVIS: "Playing Sahiba."
+
+             ●
+        JARVIS READY
+   Listening for "Hey Jarvis"
+```
+
+### Runtime flow
+
+```text
+Windows starts
+   ↓
+JARVIS background service (silent)
+   ↓
+Local wake-word detection  ← microphone audio NEVER leaves the machine here
+   ↓  "Hey Jarvis"
+UI activates → listening animation → "Yes?"
+   ↓
+Listen (VAD, end-of-speech detection)
+   ↓
+Speech-to-text
+   ↓
+LLM / Agent → Plan → Execute tools → Observe → (repeat) → Respond
+   ↓
+Text-to-speech
+   ↓
+Return to STANDBY
+```
+
+---
+
+## 2. Non-Negotiable Rules
+
+1. **Build incrementally.** One subsystem at a time. Test it. Integrate only after it works.
+2. **No fake capabilities.** Never write a function that prints "Done!" when nothing happened. Every "Done" must correspond to a real, verified action. If something can't be done reliably, say so.
+3. **No placeholders where real functionality is expected.** If a credential is needed, build the config path and document exactly what is required.
+4. **Never replace working components unnecessarily.**
+5. **Modular.** Voice, Brain, Memory, Tools, UI are independent and communicate through defined interfaces/events.
+6. **The LLM never touches the OS directly.** All actions go through registered, permission-checked tools.
+7. **Privacy by design.** Local wake word, no continuous audio/screen upload, visible mic/screen indicators.
+8. **Document every major architectural decision** in § 14.
+9. **Never commit secrets.** `.env` + `.env.example`; OS credential store for tokens.
+
+---
+
+## 3. High-Level Architecture
+
+```text
+                         JARVIS
+                           │
+            ┌──────────────┴──────────────┐
+       Desktop UI                   Background Service
+            └──────────────┬──────────────┘
+                      JARVIS CORE
+              (event bus + state machine)
+        ┌──────────────────┼──────────────────┐
+      VOICE              BRAIN              MEMORY
+   Wake word            LLM client         Short-term
+   VAD / STT            Planner            Long-term
+   TTS                  Router             Episodic / Notes
+        └──────────────────┼──────────────────┘
+                         TOOLS  (registry + executor + permissions)
+        ┌─────────┬────────┼────────┬─────────┬─────────┐
+     Computer  Browser   Google   Files     Web      Vision
+     Keyboard  Playwright Calendar Notes    Search   Screenshot
+     Mouse     Chrome    Gmail    Memory             UI understanding
+     Windows             Meet/Contacts/Drive
+```
+
+**Core principle:** subsystems publish/subscribe to events on a central bus (e.g. `WakeWordDetected`, `TranscriptReady`, `StateChanged`, `ToolStarted`, `ToolFinished`). The UI is a pure consumer of these events — it renders state, it does not own logic. This keeps the UI, the voice pipeline, and the agent testable in isolation.
+
+---
+
+## 4. State Machine
+
+Formal states:
+
+```text
+STARTING → STANDBY → WAKE_DETECTED → LISTENING → TRANSCRIBING → THINKING
+         → PLANNING → EXECUTING ⇄ OBSERVING → RESPONDING → STANDBY
+ERROR (from any state)       SLEEPING / PAUSED (user-controlled)
+```
+
+| State | Color | Visual meaning |
+|---|---|---|
+| STANDBY | 🔵 blue | Calm, slow breathing orb |
+| LISTENING | 🟢 green | Audio-reactive orb (mic amplitude/frequency) |
+| THINKING / PLANNING | 🟡 amber | Particle / orbit processing animation |
+| EXECUTING / OBSERVING | 🟠 orange | Step checklist with live progress |
+| RESPONDING | 🟣 violet | Orb pulses with TTS output |
+| ERROR | 🔴 red | Clear reason + Retry / Cancel |
+| SLEEPING / PAUSED | ⚫ dim | Mic visibly off |
+
+Transitions are explicit and validated — illegal transitions are rejected and logged. **The animation itself must communicate state**, not just a text label.
+
+---
+
+## 5. Subsystems
+
+### 5.1 Voice
+- **Passive mode:** mic → local wake-word engine only. No LLM, no cloud.
+- **Active mode:** after wake word → VAD-based recording (stop when the user stops speaking, not fixed lengths) → STT.
+- Must handle: silence detection, noise, interruption, cancellation, timeout, microphone errors/disconnects.
+- **TTS:** natural, configurable voice and speed, streaming if possible, **immediately interruptible**.
+- Never persist raw audio by default.
+
+### 5.2 Brain (LLM / Agent)
+Components: `Agent`, `Planner`, `ToolRegistry`, `ToolExecutor`, `ObservationManager`, `ConversationManager`.
+
+Controlled loop:
+```text
+REQUEST → UNDERSTAND → PLAN → SELECT TOOL → (permission check) → EXECUTE
+        → OBSERVE → DECIDE NEXT STEP → … → COMPLETE / RECOVER / ASK USER
+```
+- Structured tool/function calling only.
+- Step limits and timeouts to prevent runaway loops.
+- Recovery on failure: retry safely, try an alternative, or explain and ask.
+- Every step emits events so the UI can show the live checklist.
+
+### 5.3 Tools
+All tools share one interface: name, description, JSON schema for args, **risk level**, async `run()` returning a structured result (`ok`, `data`, `error`) — never a bare string claiming success.
+
+| Tool group | Capabilities |
+|---|---|
+| **Computer** | `open_application`, `close_application`, `mouse_move/click/double_click`, `keyboard_type/press/hotkey`, `take_screenshot`, `get_screen_size`, `focus_window`, `get_active_window` |
+| **Browser** (Playwright) | `open_browser`, `navigate`, `search`, `click`, `type`, `select`, `scroll`, `extract_text`, `get_page_state`, `close_browser` — **DOM-first**, vision only as fallback |
+| **Vision** | Screenshot → vision model → UI understanding → target → coordinates. Capture only on demand. |
+| **Notes** | `create_note`, `search_notes`, `read_note`, `update_note`, `delete_note` |
+| **Reminders** | `create_reminder`, `list_reminders`, `cancel_reminder` — persistent, survive UI close |
+| **Google** (OAuth) | Calendar, People/Contacts, Gmail, Meet, Drive |
+| **Notifications** | Native Windows toast notifications |
+
+### 5.4 Memory
+| Layer | Content |
+|---|---|
+| Short-term | Current conversation |
+| Long-term | Things explicitly asked to remember ("I prefer meetings after 3 PM") |
+| Episodic | Useful past events / interactions |
+| Notes / Tasks / Preferences / Events | Structured records |
+
+Start simple (SQLite, see ADR). Move to PostgreSQL + pgvector (or FAISS) for semantic recall when the need is real.
+
+### 5.5 Safety & Permissions
+| Level | Behavior | Examples |
+|---|---|---|
+| **LOW** | Auto-execute | Open Chrome, search, open VS Code, read screen, create note |
+| **MEDIUM** | Ask confirmation | Create calendar event, send email/message, upload file |
+| **HIGH** | Always confirm, show exact impact | Delete files/emails, financial actions, install software, change system settings |
+
+```text
+⚠️ CONFIRM ACTION
+JARVIS wants to delete: 248 files from Downloads.
+[ CANCEL ]   [ CONFIRM ]
+```
+
+### 5.6 Interruptions
+- "Actually, stop." → TTS stops **immediately**.
+- "Jarvis, cancel that." → current task cancelled where safely possible.
+- Implemented via cancellation tokens propagated through agent → executor → tools.
+
+### 5.7 Privacy
+- Local wake word; no continuous mic or screen upload.
+- Screen captured only when a tool requires it; visible "SCREEN AWARE" indicator when active.
+- Clear mic-active indicator.
+- Credentials in OS secure storage (Windows Credential Manager via `keyring`).
+- No sensitive data in logs by default.
+- Full activity/history view; one-click **Pause JARVIS**.
+
+---
+
+## 6. UI / UX
+
+**Feel:** premium, calm, intelligent, futuristic. An original visual language — not a copy of any product, not a generic dashboard.
+
+**Use:** dark-first, soft glass, subtle gradients, high-quality typography, smooth motion, strong hierarchy, generous spacing, micro-interactions, audio-reactive animation.
+**Avoid:** Bootstrap-style dashboards, card overload, rainbow colors, clutter, cheap neon/sci-fi effects, pointless graphs.
+
+### Surfaces
+1. **Floating assistant** — compact, always available, animated orb reflecting state.
+2. **Live task view** — shows the request and a step checklist (`✓` done, `●` in progress, `○` pending).
+3. **Screen-aware panel** — live preview, "👁 Looking at screen", target, action.
+4. **Activity timeline** — timestamped history of everything JARVIS did today.
+5. **Dashboard** — status, today's activity count, upcoming reminders/meetings, memory size, connected services, CPU/RAM/mic. Clean, not enterprise.
+6. **Settings** — General, Voice, Wake Word, AI Model, Memory, Privacy, Permissions, Google, Browser, Notifications, Appearance, Keyboard Shortcuts, Logs.
+7. **System tray** — Open · Pause listening · Settings · Memory · Activity · Connected services · Exit.
+8. **Global hotkey** — `Ctrl+Space` (configurable) to activate manually.
+
+### Errors are never silent
+```text
+🟠 JARVIS
+I couldn't open YouTube.
+Reason: Chrome is not responding.
+[ Retry ] [ Cancel ]
+```
+
+---
+
+## 7. Technology Choices (recommended — confirm/revise per phase in § 14)
+
+| Concern | Recommendation | Why | Alternatives |
+|---|---|---|---|
+| Desktop UI | **PySide6 (Qt 6) + QML** | Native Windows, GPU-accelerated animations, frameless/translucent windows, tray support, one process with Python | Tauri/Electron + Python backend (heavier, two runtimes) |
+| Wake word | **openWakeWord** | Free, fully local, ships a pre-trained "hey jarvis" model, no license key | Porcupine (excellent, but needs Picovoice key; custom words limited on free tier) |
+| Audio I/O | **sounddevice** (PortAudio) | Reliable on Windows, numpy-native | PyAudio |
+| VAD | **Silero VAD** | Accurate end-of-speech detection, small, local | webrtcvad |
+| STT | **faster-whisper** (local, `small`/`base`, int8) | Private, fast on CPU, good accuracy | Cloud STT (lower latency on weak CPUs, less private) |
+| LLM | **Claude API** (tool use) behind a provider-agnostic `LLMClient` interface | Strong tool calling & reasoning | Local via Ollama for offline/basic mode |
+| TTS | **Piper** (local) default; optional cloud voice | Fast, private, free, interruptible | Edge-TTS, ElevenLabs, Kokoro |
+| Browser | **Playwright** (Chromium/Chrome channel) | DOM-level automation, robust selectors | Selenium |
+| Computer control | **pywin32 / pywinauto** + **PyAutoGUI** | Windows-native window mgmt; simple input | — |
+| Screenshots | **mss** | Fast, multi-monitor | PIL ImageGrab |
+| Storage | **SQLite** first → PostgreSQL + pgvector later | Zero setup; upgrade when semantic memory needs it | FAISS |
+| Scheduler | **APScheduler** with SQLite job store | Persistent jobs | Windows Task Scheduler |
+| Notifications | **windows-toasts** (WinRT) | Native Windows 11 toasts | plyer |
+| Config | **pydantic-settings** + `.env` | Typed, validated config | — |
+| Secrets | **keyring** | Windows Credential Manager | — |
+| Logging | stdlib `logging` + JSON formatter, rotating files | Structured, no extra deps | loguru |
+| Tests | **pytest** + **pytest-asyncio** | Standard | — |
+
+> ⚠️ **Environment note:** the machine currently has **Python 3.14**. Several audio/ML packages (onnxruntime, ctranslate2 for faster-whisper, openWakeWord deps) may not yet ship 3.14 wheels. **Install Python 3.12** and use a project virtual environment (`py -3.12 -m venv .venv`).
+
+---
+
+## 8. Project Structure (target)
+
+```text
+JARVIS/
+├── JARVIS.md               ← this file (master spec)
+├── CLAUDE.md               ← how the AI engineer works on this project
+├── README.md               ← setup & run instructions
+├── .env.example
+├── requirements.txt
+├── run.py                  ← entry point
+├── app/
+│   ├── core/
+│   │   ├── events/         ← event bus
+│   │   ├── state/          ← state machine
+│   │   ├── agent/          ← agent loop, conversation manager
+│   │   ├── planner/
+│   │   └── router/
+│   ├── voice/
+│   │   ├── audio/          ← mic stream, device mgmt
+│   │   ├── wake_word/
+│   │   ├── vad/
+│   │   ├── stt/
+│   │   └── tts/
+│   ├── llm/                ← provider-agnostic LLM client
+│   ├── tools/              ← registry, executor, base Tool
+│   │   ├── computer/
+│   │   ├── browser/
+│   │   ├── vision/
+│   │   ├── notes/
+│   │   ├── reminders/
+│   │   └── google/
+│   ├── memory/
+│   ├── scheduler/
+│   ├── notifications/
+│   ├── security/           ← permissions, confirmation, secrets
+│   └── config/             ← settings, logging setup
+├── ui/                     ← PySide6 / QML: orb, panels, tray, dashboard, settings
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── manual/             ← manual test scenarios (TEST-xxx)
+├── scripts/                ← install, autostart registration, diagnostics
+├── data/                   ← local DB, models (gitignored)
+└── logs/                   ← jarvis.log, agent.log, voice.log, browser.log, errors.log (gitignored)
+```
+
+---
+
+## 9. Configuration, Logging, Performance
+
+**Config:** `.env` (never committed) + `.env.example`:
+```text
+LLM_PROVIDER=anthropic
+LLM_API_KEY=
+LLM_MODEL=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+TTS_API_KEY=
+WAKE_WORD_SENSITIVITY=0.5
+HOTKEY=ctrl+space
+```
+
+**Logging:** structured, rotating, per-subsystem (`jarvis`, `agent`, `voice`, `browser`, `errors`). No raw audio, transcripts of sensitive content, tokens, or keys by default.
+
+**Performance targets (idle):**
+- CPU < 3% while in STANDBY
+- RAM: lean baseline; STT/vision models lazy-loaded and unloadable
+- Wake-word → UI reaction < 300 ms
+- End of speech → first spoken word: aim < 2.5 s
+- All I/O async; heavy work off the UI thread
+
+---
+
+## 10. Development Phases
+
+| # | Phase | Scope |
+|---|---|---|
+| 1 | **Foundation** | Structure, config, logging, event bus, state machine, basic floating UI, system tray, start/stop |
+| 2 | **Wake Word** | Autostart at login → background mic → local "Hey Jarvis" → UI activation; reliability testing |
+| 3 | **Voice** | VAD + STT + TTS; "Hey Jarvis" → "Yes?" works perfectly |
+| 4 | **LLM** | Questions, conversation, basic commands |
+| 5 | **Computer Control** | Apps, keyboard, mouse, screenshots, windows |
+| 6 | **Browser** | Playwright: open Chrome, YouTube, search, play |
+| 7 | **Memory** | Remember, recall, notes, conversation history |
+| 8 | **Scheduler** | Reminders, notifications, scheduled tasks |
+| 9 | **Google** | OAuth + Calendar, Contacts, Gmail, Meet, Drive |
+| 10 | **Vision** | Screen understanding |
+| 11 | **Autonomous Agent** | Multi-step planning, observation, recovery |
+
+---
+
+## 11. Milestone 1 (the first real goal)
+
+```text
+Windows login → JARVIS starts automatically → wake-word detector running
+→ "Hey Jarvis" → UI changes → JARVIS says "Yes?"
+→ "How are you?" → STT → LLM → TTS → JARVIS answers → back to STANDBY
+```
+Nothing else is required for Milestone 1. **Make this reliable first.** (Covers Phases 1–4.)
+
+---
+
+## 12. Roadmap & Status
+
+Legend: ⬜ not started · 🟨 in progress · ✅ done & verified
+
+| Phase | Status | Notes |
+|---|---|---|
+| 1 Foundation | ✅ | Verified by user 2026-09-22. Added right-click menu on the orb (Win11 hides new tray icons under ^) |
+| 2 Wake Word | ✅ | Verified by user 2026-09-22 with real voice. User's normal voice scores 0.3–0.46 (background ≈ 0.00) → user `.env` threshold 0.3. Only the full phrase "Hey Jarvis" is supported (single "Jarvis" needs a custom-trained model). Laptop mic was initially delivering silence (Acer hardware/driver mute), resolved by user. Autostart ON |
+| 3 Voice | ✅ | Verified by user 2026-09-22: "Yes?" → listen → transcribe → echo reply. Whisper small: 2.7 s for 4.8 s audio, exact transcript on test sentence. Open issue: wake word needs a pause between "Hey" and "Jarvis" for this user's fast speech |
+| 4 LLM | ✅ | Verified by user 2026-09-22 by voice: conversation, follow-up context, cancel, honest refusal of PC control. Gemini free tier (`gemini-3.1-flash-lite` first, failover list); first sentence 1.1–2.7 s |
+| **Milestone 1** | ✅ | 2026-09-22: autostart → "Hey Jarvis" → "Yes?" → STT → LLM → TTS answer, all verified by user |
+| 5 Computer Control | ⬜ | |
+| 6 Browser | ⬜ | |
+| 7 Memory | ⬜ | |
+| 8 Scheduler | ⬜ | |
+| 9 Google | ⬜ | |
+| 10 Vision | ⬜ | |
+| 11 Autonomous Agent | ⬜ | |
+
+---
+
+## 13. Testing
+
+- Automated tests (pytest) for every subsystem — state machine, event bus, config, tool registry, permission checks, agent loop with a fake LLM.
+- Hardware-dependent parts (mic, speakers, screen) get **manual test scenarios** in `tests/manual/`:
+
+```text
+TEST 001 — Start Jarvis
+Expected: wake-word listener active · UI shows STANDBY · idle CPU low
+
+TEST 002 — Say "Hey Jarvis"
+Expected: wake word detected · UI becomes LISTENING · "Yes?" spoken
+
+TEST 003 — Say "Open Chrome"
+Expected: Chrome launches · activity log updates
+```
+
+---
+
+## 14. Architecture Decision Records (ADR)
+
+Each major decision is recorded here: **context → options → decision → consequences.**
+
+| # | Date | Decision | Status |
+|---|---|---|---|
+| ADR-001 | 2026-09-22 | Python 3.12 venv (system has 3.14; ML/audio wheel compatibility). 3.12.10 installed via winget | Accepted |
+| ADR-002 | 2026-09-22 | PySide6 6.11 + QML for UI | Accepted |
+| ADR-003 | 2026-09-22 | openWakeWord 0.6 (ONNX runtime) `hey_jarvis` model, threshold 0.5, 2 s cooldown. ~2 ms per 80 ms frame. Model loads off the UI thread while orb shows STARTING | Accepted |
+| ADR-007 | 2026-09-22 | Autostart via per-user `HKCU\...\Run` entry running `pythonw.exe run.py` (no admin, no console). Managed by `scripts/autostart.py` | Accepted |
+| ADR-008 | 2026-09-22 | Mic stays open except when paused; detection only in STANDBY; mic failure → ERROR with reason, silent retry every 5 s, auto-recover | Accepted |
+| ADR-004 | 2026-09-22 | Event bus + explicit state machine as the core integration pattern. Bus handlers run on the publisher's thread; the UI marshals to the Qt thread via a queued signal (`ui/bridge.py`) | Accepted |
+| ADR-006 | 2026-09-22 | Single instance enforced with `QLockFile` in `data/` (autostart + manual launch must not double-run the mic) | Accepted |
+| ADR-005 | 2026-09-22 | SQLite first, PostgreSQL + pgvector when semantic memory is needed | Proposed |
+| ADR-009 | 2026-09-22 | TTS: Piper `en_GB-alan-medium` (local, 22 kHz). Fixed phrases ("Yes?") pre-rendered at startup; playback in 50 ms blocks so `stop()` is near-instant | Accepted |
+| ADR-010 | 2026-09-22 | STT: faster-whisper `small` int8 on CPU, language forced to `en` (auto-detect is unreliable on short accented phrases). Loaded on wake (hidden behind "Yes?" + speech), unloaded after 5 min idle — machine has ~2 GB free RAM | Accepted |
+| ADR-011 | 2026-09-22 | End-of-speech via Silero VAD (bundled with openWakeWord): 0.8 s silence ends, 5 s no-speech timeout, 15 s cap, 240 ms pre-roll. The wake-word thread owns the mic and routes frames to the recorder while LISTENING (single mic reader) | Accepted |
+| ADR-013 | 2026-09-22 | Brain: Claude API, `claude-opus-5`, effort `low` for fast spoken replies, streamed; server-side `fallbacks: "default"` enabled (re-runs a safety-declined request on Anthropic's recommended fallback model). Reply spoken sentence-by-sentence as it streams. History kept in memory, append-only; reset after 10 min idle or 20 turns. Key in `.env` `CLAUDE_API_KEY`; without a key JARVIS falls back to echo replies | Accepted |
+| ADR-015 | 2026-09-22 | Claude Pro subscription does not include API access, so the default provider is **Gemini free tier** (`gemini-flash-latest` alias via `google-genai`) until the user funds the Claude API. `LLM_PROVIDER=gemini|claude` switches; both share one system prompt and the same streaming `str -> Iterator[str]` interface. Note: Google may use free-tier prompts to improve its products | Accepted |
+| ADR-014 | 2026-09-22 | "Cancel / never mind / stop" handled locally without the LLM. System prompt states JARVIS can't control the PC yet, so it never claims actions it didn't do | Accepted |
+| ADR-012 | 2026-09-22 | Voice turn runs in `VoicePipeline` on its own thread; every step uses `transition_from` so pause/cancel mid-turn aborts cleanly. Responder is a pluggable `str -> str` (echo in Phase 3, LLM in Phase 4) | Accepted |
