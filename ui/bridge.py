@@ -5,7 +5,10 @@ signal, which Qt delivers on the UI thread (queued connection across threads).
 """
 from __future__ import annotations
 
+import math
+
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
+from PySide6.QtGui import QCursor
 
 from app.core.events.events import (
     AssistantReply,
@@ -17,9 +20,22 @@ from app.core.events.events import (
 )
 from app.core.jarvis import Jarvis
 from app.core.state.states import JarvisState
-from ui.theme import STATE_COLORS, STATE_LABELS
+from ui.theme import STATE_COLORS, STATE_FACES, STATE_LABELS
 
 LINGER_MS = 8000  # keep the last reply and steps visible for a moment after finishing
+GAZE_MS = 50  # how often the eyes check where the mouse is
+GAZE_REACH = 520.0  # px from the face at which the eyes are turned as far as they go
+
+
+def gaze_direction(cursor: tuple[int, int], centre: tuple[int, int],
+                   reach: float = GAZE_REACH) -> tuple[float, float]:
+    """Where the eyes should point, as x/y in -1..1. Close to the face they barely move."""
+    dx, dy = cursor[0] - centre[0], cursor[1] - centre[1]
+    distance = math.hypot(dx, dy)
+    if distance < 1.0:
+        return 0.0, 0.0
+    pull = min(1.0, distance / reach)
+    return dx / distance * pull, dy / distance * pull
 
 
 class UiBridge(QObject):
@@ -27,6 +43,7 @@ class UiBridge(QObject):
     captionChanged = Signal()
     levelChanged = Signal()
     stepsChanged = Signal()
+    gazeChanged = Signal()
     menuRequested = Signal()
     _incoming = Signal(object)
 
@@ -37,8 +54,12 @@ class UiBridge(QObject):
         self._caption = ""
         self._level = 0.0
         self._steps: list[dict] = []
+        self._centre: tuple[int, int] | None = None
+        self._gaze = (0.0, 0.0)
         self._linger = QTimer(self, singleShot=True, interval=LINGER_MS)
         self._linger.timeout.connect(self._clear)
+        self._eyes = QTimer(self, interval=GAZE_MS)
+        self._eyes.timeout.connect(self._look)
         self._incoming.connect(self._apply)
         for event_type in (StateChanged, TranscriptReady, AssistantReply, AudioLevel, ToolStarted, ToolFinished):
             core.bus.subscribe(event_type, self._incoming.emit)
@@ -73,6 +94,20 @@ class UiBridge(QObject):
             self._level = 0.0
             self.levelChanged.emit()
             self.stateChanged.emit()
+            self._watch(STATE_FACES[event.current] != "asleep")  # closed eyes don't need to follow the mouse
+
+    def _watch(self, on: bool) -> None:
+        if on and self._centre:
+            self._eyes.start()
+        elif not on:
+            self._eyes.stop()
+
+    def _look(self) -> None:
+        position = QCursor.pos()
+        gaze = gaze_direction((position.x(), position.y()), self._centre)
+        if abs(gaze[0] - self._gaze[0]) + abs(gaze[1] - self._gaze[1]) > 0.004:  # skip repaints nobody would see
+            self._gaze = gaze
+            self.gazeChanged.emit()
 
     def _clear(self) -> None:
         self._set_caption("")
@@ -94,6 +129,25 @@ class UiBridge(QObject):
     @Property(str, notify=stateChanged)
     def stateLabel(self) -> str:
         return STATE_LABELS[self._state]
+
+    @Property(str, notify=stateChanged)
+    def expression(self) -> str:
+        """Which face JARVIS wears: calm, alert, listening, thinking, focused, warm, concerned, asleep."""
+        return STATE_FACES[self._state]
+
+    @Property(float, notify=gazeChanged)
+    def gazeX(self) -> float:
+        return self._gaze[0]
+
+    @Property(float, notify=gazeChanged)
+    def gazeY(self) -> float:
+        return self._gaze[1]
+
+    @Slot(int, int)
+    def watchFrom(self, x: int, y: int) -> None:
+        """The face tells us where it is on screen, so the eyes can follow the mouse from there."""
+        self._centre = (x, y)
+        self._watch(STATE_FACES[self._state] != "asleep")
 
     @Property(str, notify=captionChanged)
     def caption(self) -> str:

@@ -82,6 +82,14 @@ def find_window(query: str) -> Window | None:
     return best if best_score >= 0.6 else None
 
 
+def rect(window: Window) -> tuple[int, int, int, int] | None:
+    """(left, top, width, height) of the window, or None if it has gone away."""
+    box = wintypes.RECT()
+    if not user32.GetWindowRect(window.hwnd, ctypes.byref(box)):
+        return None
+    return box.left, box.top, box.right - box.left, box.bottom - box.top
+
+
 def focus(window: Window) -> bool:
     if user32.IsIconic(window.hwnd):
         user32.ShowWindow(window.hwnd, SW_RESTORE)

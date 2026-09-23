@@ -157,3 +157,35 @@ def test_interrupted_task_runs_no_more_tools():
     with pytest.raises(TaskCancelled):
         executor.run("echo", {"text": "x"})
     assert ran == []
+
+
+def test_win_l_is_refused_instead_of_silently_doing_nothing():
+    """Windows ignores synthetic Win+L, so press_keys must not report success for it."""
+    from app.tools.computer import computer_tools
+    from app.tools.computer.apps import AppIndex
+
+    tools = {t.name: t for t in computer_tools(AppIndex())}
+    result = tools["press_keys"].run(keys="windows+l")
+    assert not result.ok
+    assert "lock_pc" in result.error
+
+    assert not tools["press_keys"].run(keys="ctrl+alt+delete").ok
+
+
+def test_lock_pc_reports_failure_when_the_screen_did_not_lock(monkeypatch):
+    from app.tools.computer import computer_tools, session
+    from app.tools.computer.apps import AppIndex
+
+    tools = {t.name: t for t in computer_tools(AppIndex())}
+    monkeypatch.setattr(session, "lock", lambda: False)
+    assert not tools["lock_pc"].run().ok
+
+    monkeypatch.setattr(session, "lock", lambda: True)
+    assert tools["lock_pc"].run().data == {"locked": True}
+
+
+def test_the_session_is_not_locked_while_these_tests_run():
+    """is_locked() is what makes lock_pc honest, so check it against reality."""
+    from app.tools.computer import session
+
+    assert session.is_locked() is False

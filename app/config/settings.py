@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     # Names and words speech recognition should expect (people, apps, places), comma-separated.
     stt_vocabulary: str = "Jarvis, Notepad, WhatsApp, VS Code, Chrome, YouTube"
 
+    # Google (Calendar, Gmail, Contacts): sign in once with scripts/google_login.py
+    google_client_file: Path = PROJECT_ROOT / "data" / "google_client.json"
+    google_token_file: Path = PROJECT_ROOT / "data" / "google_token.json"
+
+    # Wake JARVIS from anywhere without the wake word.
+    hotkey: str = "ctrl+space"
+
     # Personal
     user_name: str = "Likki"
     home_city: str = "Bengaluru"

@@ -397,7 +397,7 @@ def test_go_offline_then_wake_up_gives_briefing_takes_todos_and_starts_the_day()
 
     pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=respond,
                              quick=lambda text: quick.run(text, run_tool), max_listen_seconds=3, follow_up_seconds=0.6,
-                             briefing=lambda: "Hey, hi Likki! What's on your to-do list for today?",
+                             briefing=lambda: ("Hey, hi Likki! What's on your to-do list for today?", True),
                              after_briefing=lambda: "Enjoy your day, Likki.")
     core.start()
     core.state.transition(S.WAKE_DETECTED)
@@ -492,3 +492,41 @@ def test_says_on_it_when_work_starts():
     speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
     assert wait_for(lambda: core.state.current is S.STANDBY)
     assert speaker.said == ["Yes?", WORKING_PHRASE, "Done, Notepad is open."]  # "On it." once, before the work
+
+
+def test_waking_from_rest_a_second_time_greets_instead_of_briefing_again():
+    """The full briefing (weather, meetings, to-dos, music) is once a day, not every wake."""
+    from app.core.events.events import WakeWordDetected
+    from app.voice import quick
+
+    core = Jarvis()
+    speaker = FakeSpeaker()
+    stt = FakeTranscriber("")
+    stt.transcribe = lambda audio: "what's the time"
+    started_the_day = []
+
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(),
+                             respond=lambda prompt: iter(["It's half past four."]),
+                             quick=lambda text: None, max_listen_seconds=3, follow_up_seconds=0.6,
+                             briefing=lambda: ("Welcome back, Likki.", False),
+                             after_briefing=lambda: started_the_day.append(True) or "Enjoy your day.")
+    core.start()
+    core.rest()
+    assert wait_for(lambda: core.state.current is S.RESTING)
+
+    core.bus.publish(WakeWordDetected(0.9))
+    assert wait_for(lambda: speaker.said[-1:] == ["Welcome back, Likki."])
+    # It listens for a command instead of asking for a to-do list, and plays no morning video.
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    assert started_the_day == []
+
+
+def test_the_briefing_is_remembered_for_the_day(tmp_path):
+    from app.memory.store import MemoryStore
+
+    memory = MemoryStore(tmp_path / "memory.db")
+    assert memory.note("last_briefing") is None
+    memory.set_note("last_briefing", "2026-09-23")
+    assert memory.note("last_briefing") == "2026-09-23"
+    memory.set_note("last_briefing", "2026-09-24")  # overwrites, never duplicates
+    assert memory.note("last_briefing") == "2026-09-24"

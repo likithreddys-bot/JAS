@@ -166,6 +166,19 @@ def is_dangerous(combo: tuple[str, ...]) -> bool:
     return combo in DANGEROUS_COMBOS
 
 
+def undeliverable(combo: tuple[str, ...]) -> str | None:
+    """Why Windows will ignore this combo from an application, or None if it will arrive.
+
+    These are protected sequences: pressing them succeeds silently and does nothing at all.
+    """
+    keys = set(combo)
+    if keys & {"win", "winleft", "winright"} and "l" in keys:
+        return "Windows does not let applications press Win+L. Use lock_pc to lock the PC."
+    if {"ctrl", "alt", "delete"} <= keys:
+        return "Windows does not let applications press Ctrl+Alt+Delete."
+    return None
+
+
 def press(combo: tuple[str, ...]) -> None:
     pyautogui.hotkey(*combo)
 

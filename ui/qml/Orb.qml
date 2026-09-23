@@ -104,7 +104,7 @@ Window {
         // Orbit track
         Rectangle {
             anchors.centerIn: parent
-            width: 128; height: 128; radius: 64
+            width: 156; height: 156; radius: 78
             color: "transparent"
             border.width: 1
             border.color: root.withAlpha(root.accent, 0.16)
@@ -114,7 +114,7 @@ Window {
         Shape {
             id: orbit
             anchors.centerIn: parent
-            width: 128; height: 128
+            width: 156; height: 156
             preferredRendererType: Shape.CurveRenderer
             opacity: root.isPaused ? 0.35 : 0.9
             ShapePath {
@@ -122,7 +122,7 @@ Window {
                 strokeWidth: 1.6
                 fillColor: "transparent"
                 capStyle: ShapePath.RoundCap
-                PathAngleArc { centerX: 64; centerY: 64; radiusX: 64; radiusY: 64; startAngle: -90; sweepAngle: root.isBusy ? 110 : 64 }
+                PathAngleArc { centerX: 78; centerY: 78; radiusX: 78; radiusY: 78; startAngle: -90; sweepAngle: root.isBusy ? 110 : 64 }
             }
             RotationAnimation on rotation {
                 loops: Animation.Infinite
@@ -132,40 +132,31 @@ Window {
             }
         }
 
-        // Core orb
-        Shape {
+        // The face
+        Face {
+            id: face
             anchors.centerIn: parent
-            width: 88; height: 88
-            preferredRendererType: Shape.CurveRenderer
-            scale: 1.0 + root.breath * (root.isPaused ? 0.01 : 0.035) + root.voice * 0.12
-            ShapePath {
-                strokeWidth: -1
-                fillGradient: RadialGradient {
-                    centerX: 44; centerY: 44; centerRadius: 44
-                    focalX: 32; focalY: 28
-                    GradientStop { position: 0.0; color: Qt.lighter(root.accent, 1.55) }
-                    GradientStop { position: 0.55; color: root.accent }
-                    GradientStop { position: 1.0; color: Qt.darker(root.accent, 2.4) }
-                }
-                PathAngleArc { centerX: 44; centerY: 44; radiusX: 44; radiusY: 44; sweepAngle: 360 }
+            width: 150; height: 150
+            accent: root.accent
+            expression: bridge.expression
+            voice: root.voice
+            gazeX: bridge.gazeX
+            gazeY: bridge.gazeY
+            // Deliberately not tied to `breath`: the halo carries the breathing, and a face that
+            // changed every frame would redraw the whole head 60 times a second for nothing.
+            scale: 1.0 + root.voice * 0.06
+
+            // Tell the bridge where the eyes are on screen, so they can follow the mouse.
+            function reportPosition() {
+                var centre = face.mapToGlobal(face.width / 2, face.height / 2)
+                bridge.watchFrom(centre.x, centre.y)
             }
-            // Specular highlight
-            Shape {
-                x: 18; y: 12; width: 36; height: 24
-                preferredRendererType: Shape.CurveRenderer
-                ShapePath {
-                    strokeWidth: -1
-                    fillGradient: RadialGradient {
-                        centerX: 18; centerY: 12; centerRadius: 18
-                        focalX: 18; focalY: 12
-                        GradientStop { position: 0.0; color: "#59FFFFFF" }
-                        GradientStop { position: 1.0; color: "#00FFFFFF" }
-                    }
-                    PathAngleArc { centerX: 18; centerY: 12; radiusX: 18; radiusY: 12; sweepAngle: 360 }
-                }
-            }
+            Component.onCompleted: reportPosition()
         }
     }
+
+    onXChanged: if (face) face.reportPosition()
+    onYChanged: if (face) face.reportPosition()
 
     Column {
         id: textColumn

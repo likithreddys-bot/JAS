@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 SCHEMA = """
@@ -15,7 +15,11 @@ CREATE TABLE IF NOT EXISTS facts (id INTEGER PRIMARY KEY, created TEXT NOT NULL,
 CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY, created TEXT NOT NULL, text TEXT NOT NULL, done_at TEXT);
 CREATE TABLE IF NOT EXISTS words (word TEXT PRIMARY KEY COLLATE NOCASE, created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS exchanges (id INTEGER PRIMARY KEY, at TEXT NOT NULL, user TEXT NOT NULL, assistant TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS reminders (id INTEGER PRIMARY KEY, created TEXT NOT NULL, due TEXT NOT NULL, text TEXT NOT NULL,
+                                      repeat TEXT NOT NULL DEFAULT 'none', done_at TEXT);
+CREATE TABLE IF NOT EXISTS notes (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
+REPEATS = ("none", "daily", "weekdays", "weekly")
 
 
 def _now() -> str:
@@ -35,6 +39,16 @@ class MemoryStore:
             rows = self._db.execute(sql, args).fetchall()
             self._db.commit()
             return rows
+
+    # --- notes: small things JARVIS keeps for itself, e.g. the day it last briefed ---
+
+    def note(self, key: str) -> str | None:
+        rows = self._query("SELECT value FROM notes WHERE key = ?", key)
+        return rows[0][0] if rows else None
+
+    def set_note(self, key: str, value: str) -> None:
+        self._query("INSERT INTO notes (key, value) VALUES (?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
 
     # --- facts -----------------------------------------------------------------
 
@@ -66,6 +80,44 @@ class MemoryStore:
                 "UPDATE todos SET done_at = ? WHERE id = ? AND done_at IS NULL RETURNING text", _now(), int(match))]
         return [r[0] for r in self._query(
             "UPDATE todos SET done_at = ? WHERE text LIKE ? AND done_at IS NULL RETURNING text", _now(), f"%{match.strip()}%")]
+
+    # --- reminders -----------------------------------------------------------------
+
+    def add_reminder(self, text: str, due: datetime, repeat: str = "none") -> int:
+        if repeat not in REPEATS:
+            raise ValueError(f"repeat must be one of {REPEATS}")
+        return self._query("INSERT INTO reminders (created, due, text, repeat) VALUES (?, ?, ?, ?) RETURNING id",
+                           _now(), due.isoformat(timespec="seconds"), " ".join(text.split()), repeat)[0][0]
+
+    def upcoming_reminders(self, until: datetime | None = None) -> list[dict]:
+        rows = self._query("SELECT id, due, text, repeat FROM reminders WHERE done_at IS NULL ORDER BY due")
+        items = [{"id": i, "due": datetime.fromisoformat(d), "text": t, "repeat": r} for i, d, t, r in rows]
+        return [r for r in items if until is None or r["due"] <= until]
+
+    def reminder_fired(self, reminder_id: int, now: datetime) -> None:
+        """Mark a reminder as delivered; repeating ones move to their next time instead."""
+        rows = self._query("SELECT due, repeat FROM reminders WHERE id = ?", reminder_id)
+        if not rows:
+            return
+        due, repeat = datetime.fromisoformat(rows[0][0]), rows[0][1]
+        if repeat == "none":
+            self._query("UPDATE reminders SET done_at = ? WHERE id = ?", _now(), reminder_id)
+            return
+        while due <= now:
+            due += timedelta(days=7 if repeat == "weekly" else 1)
+            while repeat == "weekdays" and due.weekday() >= 5:
+                due += timedelta(days=1)
+        self._query("UPDATE reminders SET due = ? WHERE id = ?", due.isoformat(timespec="seconds"), reminder_id)
+
+    def cancel_reminders(self, match: str) -> list[str]:
+        """Cancel open reminders by number or by words in their text."""
+        if match.strip().isdigit():
+            rows = self._query("UPDATE reminders SET done_at = ? WHERE id = ? AND done_at IS NULL RETURNING text",
+                               "cancelled " + _now(), int(match))
+        else:
+            rows = self._query("UPDATE reminders SET done_at = ? WHERE text LIKE ? AND done_at IS NULL RETURNING text",
+                               "cancelled " + _now(), f"%{match.strip()}%")
+        return [r[0] for r in rows]
 
     # --- learned words (spellings for speech recognition) ------------------------
 
@@ -103,6 +155,10 @@ class MemoryStore:
             sections.append("Things you remember about the user:\n" + "\n".join(f"- {f}" for f in facts))
         if todos := self.open_todos():
             sections.append("The user's open to-dos:\n" + "\n".join(f"- ({i}) {t}" for i, t in todos))
+        if reminders := self.upcoming_reminders()[:10]:
+            sections.append("Upcoming reminders:\n" + "\n".join(
+                f"- ({r['id']}) {r['due']:%a %d %b %I:%M %p}: {r['text']}"
+                + (f" [{r['repeat']}]" if r["repeat"] != "none" else "") for r in reminders))
         if talks := self.recent_exchanges():
             sections.append("Your most recent exchanges (possibly from earlier sessions):\n" + "\n".join(
                 f"- [{at[:16].replace('T', ' ')}] User: {u} | You: {a[:200]}" for at, u, a in talks))

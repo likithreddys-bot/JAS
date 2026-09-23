@@ -32,5 +32,12 @@ pycaw>=20250101
 pillow>=12,<13
 Send2Trash>=2,<3
 
+# Phase 8 — Reminders & notifications
+windows-toasts>=1.3,<2
+
+# Phase 9 — Google (Calendar, Gmail, Contacts)
+google-api-python-client>=2.200,<3
+google-auth-oauthlib>=1.4,<2
+
 # Dev / tests
 pytest>=9.1

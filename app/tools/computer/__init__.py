@@ -13,7 +13,7 @@ import mss
 import mss.tools
 
 from app.tools.base import Risk, Tool, ToolResult
-from app.tools.computer import apps, keyboard, windows
+from app.tools.computer import apps, keyboard, session, windows
 
 SCREENSHOT_DIR = Path.home() / "Pictures" / "JARVIS"
 
@@ -78,9 +78,20 @@ def computer_tools(app_index: apps.AppIndex) -> list[Tool]:
             combo = keyboard.parse_combo(keys)
         except ValueError as exc:
             return ToolResult(False, error=f"{exc}. Use names like enter, ctrl+s, volumeup, playpause, nexttrack.")
+        blocked = keyboard.undeliverable(combo)
+        if blocked:
+            return ToolResult(False, error=blocked)
         target = windows.foreground_window()
         keyboard.press(combo)
         return ToolResult(True, {"pressed": "+".join(combo), "active_window": target.title if target else None})
+
+    def lock_pc() -> ToolResult:
+        try:
+            if session.lock():
+                return ToolResult(True, {"locked": True})
+        except OSError as exc:
+            return ToolResult(False, error=str(exc))
+        return ToolResult(False, error="Windows did not lock the session.")
 
     def take_screenshot() -> ToolResult:
         SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
@@ -121,6 +132,8 @@ def computer_tools(app_index: apps.AppIndex) -> list[Tool]:
              {"type": "object", "properties": {"keys": {"type": "string"}}, "required": ["keys"]},
              press_keys, lambda keys: f"Pressing {keys}", risk=keys_risk,
              confirm_question=lambda keys: f"Pressing {keys} may close something or delete. Should I do it?"),
+        Tool("lock_pc", "Lock the PC, so the lock screen comes up and a password is needed to get back in.",
+             {"type": "object", "properties": {}}, lock_pc, lambda: "Locking your PC"),
         Tool("take_screenshot", "Save a screenshot of the whole screen to the Pictures\\JARVIS folder.",
              {"type": "object", "properties": {}}, take_screenshot, lambda: "Taking a screenshot"),
     ]

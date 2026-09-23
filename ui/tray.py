@@ -26,10 +26,11 @@ def orb_icon(color: str, size: int = 64) -> QIcon:
 
 
 class Tray(QSystemTrayIcon):
-    def __init__(self, bridge: UiBridge, window: QWindow) -> None:
+    def __init__(self, bridge: UiBridge, window: QWindow, dashboard: QWindow | None = None) -> None:
         super().__init__()
         self._bridge = bridge
         self._window = window
+        self._dashboard = dashboard
 
         menu = QMenu()
         title = menu.addAction("JARVIS")
@@ -41,6 +42,8 @@ class Tray(QSystemTrayIcon):
         self._pause_action.triggered.connect(bridge.togglePause)
         menu.addAction(self._show_action)
         menu.addAction(self._pause_action)
+        if dashboard is not None:
+            menu.addAction("Dashboard", self._show_dashboard)
         menu.addSeparator()
         menu.addAction("Exit", QApplication.quit)
         self._menu = menu  # keep a reference; the tray does not own the menu
@@ -74,6 +77,11 @@ class Tray(QSystemTrayIcon):
                 self._hide_hint_shown = True
         else:
             self.show_window()
+
+    def _show_dashboard(self) -> None:
+        self._dashboard.show()
+        self._dashboard.raise_()
+        self._dashboard.requestActivate()
 
     def show_window(self) -> None:
         # No activation: the orb must not steal keyboard focus from the user's app.

@@ -68,7 +68,7 @@ class VoicePipeline:
         respond: Callable[[str], Iterable[str]],
         quick: Callable[[str], str | None] | None = None,
         on_exchange: Callable[[str, str], None] = lambda user, reply: None,
-        briefing: Callable[[], str] | None = None,
+        briefing: Callable[[], tuple[str, bool]] | None = None,
         after_briefing: Callable[[], str] | None = None,
         max_listen_seconds: float = 15.0,
         follow_up_seconds: float = 0.0,
@@ -80,7 +80,7 @@ class VoicePipeline:
         self._respond = respond
         self._quick = quick  # instant commands (media/volume) that skip the LLM
         self._on_exchange = on_exchange  # e.g. log to long-term memory
-        self._briefing = briefing  # what to say when woken from rest
+        self._briefing = briefing  # woken from rest: (what to say, is this the first wake today?)
         self._after_briefing = after_briefing  # e.g. start morning music; returns a closing line
         self._max_wait = max_listen_seconds + LISTEN_WAIT_SLACK
         self._follow_up_seconds = follow_up_seconds
@@ -99,10 +99,10 @@ class VoicePipeline:
 
     def _on_state(self, event: StateChanged) -> None:
         if event.current is S.WAKE_DETECTED:
-            if event.previous is S.RESTING and self._briefing:
+            if event.reason in ("typed", "announcement"):
+                self._turns.put(event.reason)
+            elif event.previous is S.RESTING and self._briefing and event.reason != "hotkey":
                 self._turns.put("briefing")
-            elif event.reason == "announcement":
-                self._turns.put("announcement")
             else:
                 self._turns.put("request")
         elif event.current is S.SLEEPING:
@@ -148,6 +148,20 @@ class VoicePipeline:
         # Load speech-to-text while we say "Yes?" and the user talks, hiding the load time.
         threading.Thread(target=self._preload_stt, name="stt-preload", daemon=True).start()
 
+        if kind == "typed":
+            text = self._core.typed_request or ""
+            self._core.typed_request = None
+            if not state.transition_from(S.WAKE_DETECTED, S.TRANSCRIBING):
+                return
+            self._answer(text, follow_up=False)
+            if self._core.rest_requested:
+                self._go_rest()
+                return
+            for current in (S.RESPONDING, S.OBSERVING, S.THINKING):
+                if state.transition_from(current, S.STANDBY):
+                    break
+            return
+
         if kind == "request":
             self._speaker.speak(ACK_PHRASE)
             self._recorder.begin()
@@ -156,7 +170,8 @@ class VoicePipeline:
                 return
             follow_up = False
         else:  # JARVIS speaks first: morning briefing, or an announcement such as a break reminder
-            text = self._briefing() if kind == "briefing" else (self._core.announcement or "")
+            # The full briefing happens once a day; waking again later is just a greeting.
+            text, first_today = self._briefing() if kind == "briefing" else ((self._core.announcement or ""), False)
             self._core.announcement = None
             if not text or not state.transition_from(S.WAKE_DETECTED, S.RESPONDING):
                 state.transition_from(S.WAKE_DETECTED, S.STANDBY)
@@ -164,7 +179,7 @@ class VoicePipeline:
             self._core.bus.publish(AssistantReply(text))
             if not self._speaker.speak(text):
                 return
-            if kind == "briefing":
+            if kind == "briefing" and first_today:
                 self._briefing_todos()
                 return
             if not self._listen_again(self._follow_up_seconds or 8.0):

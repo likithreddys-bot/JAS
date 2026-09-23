@@ -25,6 +25,7 @@ class Jarvis:
         self.cancelled = threading.Event()
         self.rest_requested = False  # rest once the current reply has been spoken
         self.announcement: str | None = None  # something JARVIS starts saying by itself
+        self.typed_request: str | None = None  # a request typed in the dashboard instead of spoken
         self.bus.subscribe(WakeWordDetected, self._on_wake_word)
         self.bus.subscribe(MicrophoneUnavailable, self._on_mic_unavailable)
         self.bus.subscribe(MicrophoneRecovered, self._on_mic_recovered)
@@ -38,6 +39,20 @@ class Jarvis:
     def rest(self, reason: str = "going offline") -> bool:
         """Go quiet: only the wake word is listened for, and it wakes JARVIS with a briefing."""
         return self.state.transition_from(JarvisState.STANDBY, JarvisState.RESTING, reason)
+
+    def activate(self, reason: str = "hotkey") -> bool:
+        """Start listening without the wake word (global hotkey)."""
+        for state in (JarvisState.STANDBY, JarvisState.RESTING):
+            if self.state.transition_from(state, JarvisState.WAKE_DETECTED, reason):
+                return True
+        return False
+
+    def ask_text(self, text: str) -> bool:
+        """Handle a typed request (dashboard) as if it had been spoken."""
+        if not text.strip():
+            return False
+        self.typed_request = text.strip()
+        return self.activate("typed")
 
     def announce(self, text: str) -> bool:
         """Start speaking on JARVIS's own initiative (e.g. a break reminder). Only when idle."""
