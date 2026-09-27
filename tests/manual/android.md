@@ -81,8 +81,24 @@ playback drain in `Mouth.kt`: `write` only fills the buffer, so playback must be
 - **A wake word on the phone.** The app would have to run the wake-word model on the phone
   continuously. That is possible but it costs battery all day, and the face being on screen already
   means JAS is listening — there is nothing to wake.
-- **Working away from home.** The app reaches the laptop over the local network only. Nothing is
-  exposed to the internet, on purpose.
+## Working away from home (Tailscale)
+
+The app reaches the laptop directly over the internet only through Tailscale, a private VPN mesh —
+never through a forwarded router port. Setup, once:
+
+1. On the laptop, Tailscale is already installed and signed in. Confirm the address it's using:
+   `& "C:\Program Files\Tailscale\tailscale.exe" ip -4` — it looks like `100.x.y.z`.
+2. On the phone, install **Tailscale** from the Play Store and sign in with the **same account**.
+3. In the JAS app, scroll to **"Laptop's Tailscale address (only needed away from home)"** and enter
+   `100.x.y.z:8770` (the address from step 1, with the JAS port).
+4. Turn off Wi-Fi on the phone (or use mobile data) and confirm JAS still answers.
+
+This is why the PIN now locks a source out after five wrong guesses (`app/remote.py`) — a 6-digit
+PIN alone is fine on the home Wi-Fi, where an attacker already has to be inside the house, but not
+once this is reachable from anywhere.
+
+The Tailscale address is remembered separately from the one LAN discovery finds, and is only ever
+set by hand — so coming home and leaving again does not lose it. See ADR-080 in `JARVIS.md`.
 
 ## If it will not connect
 

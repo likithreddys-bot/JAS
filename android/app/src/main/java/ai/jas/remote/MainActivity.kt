@@ -48,12 +48,15 @@ class MainActivity : AppCompatActivity() {
 
         hostField = findViewById(R.id.host)
         val pin = findViewById<EditText>(R.id.pin)
+        val away = findViewById<EditText>(R.id.away)
         hostField.setText(laptop.host)
         pin.setText(laptop.pin)
+        away.setText(laptop.awayHost)
 
         findViewById<Button>(R.id.show).setOnClickListener {
             laptop.host = hostField.text.toString()
             laptop.pin = pin.text.toString()
+            laptop.awayHost = away.text.toString()
             if (!laptop.configured) {
                 say("Enter the PIN first — JAS prints it on the laptop when it starts.")
                 return@setOnClickListener

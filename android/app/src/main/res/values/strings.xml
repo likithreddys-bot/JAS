@@ -10,6 +10,8 @@
     <string name="hide_jas">Hide the face</string>
     <string name="type_hint">or type…</string>
     <string name="send">Go</string>
+    <string name="away_label">Laptop’s Tailscale address (only needed away from home)</string>
+    <string name="away_hint">e.g. 100.70.91.55:8770</string>
     <string name="pair_again">Pair again</string>
     <string name="pair_again_ask">Forget this laptop’s certificate? Only do this if JAS says it is not the laptop you paired with — normally you never need it.</string>
     <string name="pair_again_done">Forgotten. Tap Show JAS on screen to pair again.</string>

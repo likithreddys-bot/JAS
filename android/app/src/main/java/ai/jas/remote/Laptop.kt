@@ -40,6 +40,16 @@ class Laptop(context: Context) {
         get() = prefs.getString("host", "") ?: ""
         set(value) = prefs.edit().putString("host", value.trim()).apply()
 
+    /**
+     * The laptop's Tailscale address, e.g. "100.70.91.55:8770" — set once, by hand, and never
+     * touched by discovery. [host] is what LAN broadcast last found and is only ever right on the
+     * home network; overwriting this with that would strand the app the next time you left the
+     * house with no working address remembered at all.
+     */
+    var awayHost: String
+        get() = prefs.getString("away_host", "") ?: ""
+        set(value) = prefs.edit().putString("away_host", value.trim()).apply()
+
     var pin: String
         get() = prefs.getString("pin", "") ?: ""
         set(value) = prefs.edit().putString("pin", value.trim()).apply()
@@ -87,9 +97,22 @@ class Laptop(context: Context) {
             readTimeout = timeout
         }
 
-    /** Polls the laptop, and goes looking for it when it cannot be reached. */
+    /**
+     * Polls the laptop. Tries the last address that worked, then the Tailscale address if one is
+     * set, then asks the network to find it — in that order, because the LAN is fastest when it is
+     * reachable at all, and only broadcast discovery can find an address that changed.
+     */
     suspend fun state(): Snapshot? {
         if (host.isNotEmpty()) fetchState()?.let { return it }
+
+        val away = awayHost
+        if (away.isNotEmpty() && away != host) {
+            val before = host
+            host = away  // fetchState() reads the current host; this is how it is told which one
+            fetchState()?.let { return it }
+            host = before  // that one did not work either - do not strand a still-good LAN address
+        }
+
         return if (relocate()) fetchState() else null
     }
 

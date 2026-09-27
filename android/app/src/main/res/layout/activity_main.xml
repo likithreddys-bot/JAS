@@ -129,6 +129,26 @@
             android:layout_marginTop="28dp"/>
 
         <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/away_label"
+            android:textColor="#7C8699"
+            android:textSize="12sp"
+            android:layout_marginTop="14dp"/>
+
+        <EditText
+            android:id="@+id/away"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/away_hint"
+            android:textColorHint="#5A6375"
+            android:textColor="#C9D3E4"
+            android:textSize="13sp"
+            android:inputType="textUri"
+            android:importantForAutofill="no"
+            android:layout_marginTop="4dp"/>
+
+        <TextView
             android:id="@+id/cert"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
