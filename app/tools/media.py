@@ -6,10 +6,37 @@ and lets JARVIS verify playback instead of assuming it.
 from __future__ import annotations
 
 import asyncio
+import threading
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
 PLAYING, PAUSED = 4, 5  # GlobalSystemMediaTransportControlsSessionPlaybackStatus
+
+
+def _sync(coroutine):
+    """Run a coroutine from any thread, even one that already has a running event loop.
+
+    Playwright's sync API runs its own loop on the calling thread, so `asyncio.run` there raises
+    "cannot be called from a running event loop" — which is exactly what broke play_music.
+    A private loop on a private thread is immune to whatever the caller is doing.
+    """
+    done, failed = [], []
+
+    def run() -> None:
+        loop = asyncio.new_event_loop()
+        try:
+            done.append(loop.run_until_complete(coroutine))
+        except BaseException as exc:  # carried back to the caller's thread below
+            failed.append(exc)
+        finally:
+            loop.close()
+
+    worker = threading.Thread(target=run, name="media-winrt", daemon=True)
+    worker.start()
+    worker.join()
+    if failed:
+        raise failed[0]
+    return done[0]
 
 
 @dataclass(frozen=True)
@@ -21,17 +48,17 @@ class NowPlaying:
 
 
 def now_playing() -> NowPlaying | None:
-    return asyncio.run(_now_playing())
+    return _sync(_now_playing())
 
 
 def control(action: str) -> NowPlaying:
     """pause / resume / next / previous on the current media session; returns the resulting state."""
-    return asyncio.run(_control(action))
+    return _sync(_control(action))
 
 
 def wait_until_playing(expected_title: str, app_hint: str = "chrome", timeout: float = 15.0) -> NowPlaying | None:
     """Wait for `app_hint` to report playback, preferring a session whose title matches."""
-    return asyncio.run(_wait_until_playing(expected_title, app_hint, timeout))
+    return _sync(_wait_until_playing(expected_title, app_hint, timeout))
 
 
 def titles_match(expected: str, actual: str) -> bool:

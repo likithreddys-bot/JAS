@@ -10,7 +10,7 @@ from app.tools.browser import browser_tools, chrome_profiles, music
 def user_data(tmp_path):
     state = {"profile": {"last_used": "Profile 2", "info_cache": {
         "Profile 2": {"name": "likithreddy", "user_name": "likith@example.com"},
-        "Profile 3": {"name": "vaibhav-vyapaar.com", "user_name": "work@vaibhav-vyapaar.com"},
+        "Profile 3": {"name": "example-work.com", "user_name": "work@example-work.com"},
         "Profile 4": {"name": "Likith", "user_name": ""},
         "Profile 5": {"name": "TheBatMan", "user_name": ""},
         "Profile 6": {"name": "Jaya", "user_name": ""},
@@ -21,7 +21,7 @@ def user_data(tmp_path):
 
 def test_profiles_are_listed_with_last_used(user_data):
     profiles, last_used = chrome_profiles.list_profiles(user_data)
-    assert [p.name for p in profiles] == ["likithreddy", "vaibhav-vyapaar.com", "Likith", "TheBatMan", "Jaya"]
+    assert [p.name for p in profiles] == ["likithreddy", "example-work.com", "Likith", "TheBatMan", "Jaya"]
     assert last_used == "Profile 2"
 
 
@@ -30,8 +30,8 @@ def test_profiles_are_listed_with_last_used(user_data):
     ("likithreddy", "Profile 2"),
     ("batman", "Profile 5"),
     ("jaya", "Profile 6"),
-    ("vaibhav", "Profile 3"),
-    ("work@vaibhav-vyapaar.com", "Profile 3"),
+    ("work", "Profile 3"),  # part of a profile named after a domain is enough
+    ("work@example-work.com", "Profile 3"),
 ])
 def test_spoken_profile_names_match(user_data, spoken, directory):
     profiles, _ = chrome_profiles.list_profiles(user_data)
@@ -109,3 +109,46 @@ def test_music_reports_ads_and_failures_honestly(fake_play):
     playing["state"] = None
     result = play.run(query="Sahiba")
     assert not result.ok and "didn't start playing" in result.error
+
+
+def test_a_browser_that_dies_mid_request_is_restarted_and_retried(tmp_path):
+    """"Target page, context or browser has been closed" happened mid-search in real use."""
+    from playwright.sync_api import Error as PlaywrightError
+
+    from app.tools.browser.session import BrowserSession
+
+    session = BrowserSession(tmp_path)
+    pages, restarts = [], []
+    session.page = lambda: pages.append(object()) or pages[-1]
+    session._shutdown = lambda: restarts.append(True)
+
+    attempts = []
+
+    def flaky(page):
+        attempts.append(page)
+        if len(attempts) == 1:
+            raise PlaywrightError("Page.goto: Target page, context or browser has been closed")
+        return {"ok": True}
+
+    assert session._retrying(flaky) == {"ok": True}
+    assert len(attempts) == 2 and restarts == [True]
+    assert attempts[0] is not attempts[1], "the retry must use a fresh page"
+
+
+def test_other_browser_errors_are_not_silently_retried(tmp_path):
+    import pytest
+    from playwright.sync_api import Error as PlaywrightError
+
+    from app.tools.browser.session import BrowserSession
+
+    session = BrowserSession(tmp_path)
+    session.page = lambda: object()
+    tries = []
+
+    def always_fails(page):
+        tries.append(page)
+        raise PlaywrightError("net::ERR_NAME_NOT_RESOLVED")
+
+    with pytest.raises(PlaywrightError):
+        session._retrying(always_fails)
+    assert len(tries) == 1, "a real error must surface, not be retried into confusion"

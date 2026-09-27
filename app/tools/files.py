@@ -37,6 +37,9 @@ class FileAccess:
         self.root = root.resolve()
         self.backups = backups
         self.notes = notes
+        # Files JARVIS wrote itself. Rewriting its own work is not a risk worth interrupting the
+        # user for, and asking made it invent "_v2" names instead of editing what it had made.
+        self.written: set[Path] = set()
 
     def resolve(self, path: str) -> Path:
         candidate = Path(os.path.expandvars(os.path.expanduser(path.strip().strip('"'))))
@@ -177,6 +180,7 @@ def file_tools(access: FileAccess) -> list[Tool]:
         target.write_text(content, encoding="utf-8")
         if target.read_text(encoding="utf-8") != content:
             return ToolResult(False, error="The file didn't save correctly.")
+        access.written.add(target)
         return ToolResult(True, {"saved": str(target), "lines": content.count("\n") + 1,
                                  "backup": str(backup) if backup else None})
 
@@ -224,7 +228,10 @@ def file_tools(access: FileAccess) -> list[Tool]:
 
     def write_risk(path: str, content: str = "") -> Risk:
         try:
-            return Risk.MEDIUM if access.resolve(path).exists() else Risk.LOW
+            target = access.resolve(path)
+            if target in access.written:
+                return Risk.LOW  # JARVIS's own file: it still keeps a backup, it just doesn't ask
+            return Risk.MEDIUM if target.exists() else Risk.LOW
         except FileAccessError:
             return Risk.LOW  # write_file will refuse it anyway
 
@@ -245,8 +252,9 @@ def file_tools(access: FileAccess) -> list[Tool]:
         Tool("create_folder", "Create a folder (and any missing parent folders).",
              {"type": "object", "properties": {"path": path_param}, "required": ["path"]},
              guarded(create_folder), lambda path: f"Creating folder {Path(path).name}"),
-        Tool("write_file", "Create or overwrite a text/code file with the complete new content. Overwriting asks "
-             "the user first and keeps a backup. Use for writing new code and saving bug fixes.",
+        Tool("write_file", "Create or overwrite a text/code file with the complete new content. To change a file "
+             "you already made, write the SAME path again - never invent a second file. Overwriting someone "
+             "else's file asks them first; either way a backup is kept.",
              {"type": "object", "properties": {"path": path_param, "content": {"type": "string"}}, "required": ["path", "content"]},
              guarded(write_file), lambda path, content="": f"Saving {Path(path).name}", risk=write_risk,
              confirm_question=lambda path, content="": f"Should I overwrite {Path(path).name}? I'll keep a backup."),

@@ -148,9 +148,10 @@ def test_pause_while_listening_cancels_turn():
     core.state.transition(S.WAKE_DETECTED)
     assert wait_for(lambda: core.state.current is S.LISTENING)
     core.pause()
-    assert speaker.stopped.is_set()
-    time.sleep(0.2)
-    assert core.state.current is S.SLEEPING
+    # Pausing publishes an event that the pipeline handles on its own thread, so neither the
+    # speaker being stopped nor the new state is true the instant pause() returns.
+    assert wait_for(speaker.stopped.is_set)
+    assert wait_for(lambda: core.state.current is S.SLEEPING)
     assert speaker.said == ["Yes?"]
 
 
@@ -442,6 +443,10 @@ def test_real_transcriber_builds_and_updates_its_vocabulary(tmp_path):
     ("Search for", True), ("Uhm...", True), ("So there is a Python question on my screen, and", True),
     ("Open Notepad please.", False), ("Explain this.", False), ("Turn it on.", False),
     ("What's the weather?", False), ("Play Sahiba.", False),
+    # pausing mid-thought without a full stop keeps the mic open
+    ("Go through my project and check if", True), ("Open the file that", True), ("Put it in", True),
+    # the same words are fine once the sentence has actually ended
+    ("Leave it on.", False), ("I'll do that.", False), ("Yes it is.", False),
 ])
 def test_unfinished_sentence_detection(text, unfinished):
     from app.voice.pipeline import _UNFINISHED
@@ -530,3 +535,106 @@ def test_the_briefing_is_remembered_for_the_day(tmp_path):
     assert memory.note("last_briefing") == "2026-09-23"
     memory.set_note("last_briefing", "2026-09-24")  # overwrites, never duplicates
     assert memory.note("last_briefing") == "2026-09-24"
+
+
+def test_a_higher_voice_gets_answered_in_the_higher_voice():
+    """Whoever is speaking, JAS answers in whichever of its two voices is closer to their pitch."""
+    from app.voice.pitch import SAMPLE_RATE
+
+    class TwoVoiceSpeaker(FakeSpeaker):
+        def __init__(self):
+            super().__init__()
+            self._kind = "lower"
+            self.switches = []
+
+        def use(self, kind):
+            self._kind = kind
+            self.switches.append(kind)
+
+    def tone(hz, seconds=1.2):
+        t = np.arange(int(SAMPLE_RATE * seconds)) / SAMPLE_RATE
+        wave = sum(6000 / (n + 1) * np.sin(2 * np.pi * hz * (n + 1) * t) for n in range(5))
+        return wave.astype(np.int16)
+
+    core = Jarvis()
+    speaker = TwoVoiceSpeaker()
+    pipeline = VoicePipeline(core, speaker, FakeTranscriber("hello"), make_recorder(),
+                             respond=echo_reply, max_listen_seconds=3)
+
+    pipeline._match_the_speaker(tone(210))          # a higher-pitched voice
+    assert speaker.switches[-1:] == ["higher"]
+    pipeline._match_the_speaker(tone(105))          # a lower-pitched one
+    assert speaker.switches[-1:] == ["lower"]
+
+
+def test_voice_matching_can_be_turned_off():
+    class TwoVoiceSpeaker(FakeSpeaker):
+        def __init__(self):
+            super().__init__()
+            self.switches = []
+
+        def use(self, kind):
+            self.switches.append(kind)
+
+    from app.voice.pitch import SAMPLE_RATE
+
+    t = np.arange(int(SAMPLE_RATE * 1.2)) / SAMPLE_RATE
+    high = (6000 * np.sin(2 * np.pi * 210 * t)).astype(np.int16)
+
+    core = Jarvis()
+    speaker = TwoVoiceSpeaker()
+    pipeline = VoicePipeline(core, speaker, FakeTranscriber("hello"), make_recorder(),
+                             respond=echo_reply, max_listen_seconds=3, match_voice=False)
+    pipeline._match_the_speaker(high)
+    assert speaker.switches == []
+
+
+def test_a_model_that_says_nothing_after_doing_the_work_is_not_an_error():
+    """Gemini sometimes ends a turn after its tool calls. "Something went wrong" would be a lie."""
+    from app.core.events.events import ToolStarted
+    from app.voice.pipeline import DID_IT
+
+    core = Jarvis()
+    speaker, stt = FakeSpeaker(), FakeTranscriber("open notepad")
+
+    def respond(prompt):
+        core.bus.publish(ToolStarted(1, "Opening Notepad", "open_application"))
+        return iter(())  # tools ran, then nothing was said
+
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=respond, max_listen_seconds=3)
+    core.start()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
+
+    assert wait_for(lambda: speaker.said[-1:] == [DID_IT]), f"said {speaker.said}"
+    assert wait_for(lambda: core.state.current is S.STANDBY)
+    assert core.state.current is not S.ERROR
+
+
+def test_a_model_that_says_nothing_and_did_nothing_asks_again():
+    from app.voice.pipeline import NOTHING_TO_SAY
+
+    core = Jarvis()
+    speaker, stt = FakeSpeaker(), FakeTranscriber("mumble")
+    pipeline = VoicePipeline(core, speaker, stt, make_recorder(),
+                             respond=lambda prompt: iter(()), max_listen_seconds=3)
+    core.start()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
+    assert wait_for(lambda: speaker.said[-1:] == [NOTHING_TO_SAY]), f"said {speaker.said}"
+
+
+def test_pausing_never_announces_that_it_stopped():
+    """Someone who just muted JAS should not hear it talk. This raced intermittently before."""
+    from app.voice.pipeline import STOPPED_PHRASE
+
+    for _ in range(12):  # the window was narrow, so try it repeatedly
+        core, pipeline, speaker, *_ = setup()
+        core.state.transition(S.WAKE_DETECTED)
+        assert wait_for(lambda: core.state.current is S.LISTENING)
+        core.pause()
+        assert wait_for(lambda: core.state.current is S.SLEEPING)
+        time.sleep(0.05)
+        assert STOPPED_PHRASE not in speaker.said, f"said {speaker.said}"

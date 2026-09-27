@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0B0E14"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:padding="20dp">
+
+        <ai.jas.remote.JasFace
+            android:id="@+id/face"
+            android:layout_width="200dp"
+            android:layout_height="200dp"
+            android:layout_marginTop="4dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="#E8ECF4"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.4"
+            android:layout_marginTop="8dp"/>
+
+        <TextView
+            android:id="@+id/label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/connecting"
+            android:textColor="#9AA3B5"
+            android:textSize="13sp"
+            android:layout_marginTop="4dp"/>
+
+        <TextView
+            android:id="@+id/said"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#C9D3E4"
+            android:textSize="15sp"
+            android:lineSpacingExtra="3dp"
+            android:layout_marginTop="12dp"/>
+
+        <EditText
+            android:id="@+id/host"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/host_hint"
+            android:textColorHint="#6D768A"
+            android:textColor="#E8ECF4"
+            android:textSize="16sp"
+            android:inputType="textUri"
+            android:importantForAutofill="no"
+            android:layout_marginTop="18dp"/>
+
+        <EditText
+            android:id="@+id/pin"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/pin_hint"
+            android:textColorHint="#6D768A"
+            android:textColor="#E8ECF4"
+            android:textSize="16sp"
+            android:inputType="number"
+            android:importantForAutofill="no"
+            android:layout_marginTop="6dp"/>
+
+        <!-- The one button that matters, made unmistakably the one button that matters. -->
+        <Button
+            android:id="@+id/show"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/show_jas"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:textAllCaps="false"
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp"
+            android:layout_marginTop="18dp"/>
+
+        <TextView
+            android:id="@+id/steps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/steps"
+            android:textColor="#7C8699"
+            android:textSize="12sp"
+            android:lineSpacingExtra="2dp"
+            android:layout_marginTop="10dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="20dp">
+
+            <EditText
+                android:id="@+id/text"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:hint="@string/type_hint"
+                android:textColorHint="#6D768A"
+                android:textColor="#E8ECF4"
+                android:textSize="16sp"
+                android:inputType="text"
+                android:imeOptions="actionSend"
+                android:importantForAutofill="no"/>
+
+            <Button
+                android:id="@+id/send"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAllCaps="false"
+                android:text="@string/send"/>
+        </LinearLayout>
+
+        <!-- Everything below the line is rarely wanted, and is deliberately small and far from
+             Show, because tapping Pair again by mistake is what stopped this working the first time. -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#1E2634"
+            android:layout_marginTop="28dp"/>
+
+        <TextView
+            android:id="@+id/cert"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#5A6375"
+            android:textSize="10sp"
+            android:layout_marginTop="12dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp">
+
+            <TextView
+                android:id="@+id/hide"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="@string/hide_jas"
+                android:textColor="#7C8699"
+                android:textSize="12sp"
+                android:gravity="center"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"/>
+
+            <TextView
+                android:id="@+id/repair"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="@string/pair_again"
+                android:textColor="#7C8699"
+                android:textSize="12sp"
+                android:gravity="center"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"/>
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

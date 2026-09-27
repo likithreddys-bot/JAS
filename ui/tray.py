@@ -31,9 +31,10 @@ class Tray(QSystemTrayIcon):
         self._bridge = bridge
         self._window = window
         self._dashboard = dashboard
+        self._name = bridge.assistantName
 
         menu = QMenu()
-        title = menu.addAction("JARVIS")
+        title = menu.addAction(self._name)
         title.setEnabled(False)
         menu.addSeparator()
         self._show_action = QAction(menu)
@@ -59,18 +60,18 @@ class Tray(QSystemTrayIcon):
 
     def _refresh(self) -> None:
         self.setIcon(orb_icon(self._bridge.stateColor))
-        self.setToolTip(f"JARVIS — {self._bridge.stateLabel}")
-        self._show_action.setText("Hide JARVIS" if self._window.isVisible() else "Show JARVIS")
-        self._pause_action.setText("Resume JARVIS" if self._bridge.paused else "Pause JARVIS")
+        self.setToolTip(f"{self._name} — {self._bridge.stateLabel}")
+        self._show_action.setText(f"Hide {self._name}" if self._window.isVisible() else f"Show {self._name}")
+        self._pause_action.setText(f"Resume {self._name}" if self._bridge.paused else f"Pause {self._name}")
 
     def _toggle_window(self) -> None:
         if self._window.isVisible():
             self._window.hide()
             if not self._hide_hint_shown:
-                # Windows 11 tucks new tray icons behind the ^ overflow, so say where JARVIS went.
+                # Windows 11 tucks new tray icons behind the ^ overflow, so say where it went.
                 self.showMessage(
-                    "JARVIS is still running",
-                    "Click the JARVIS icon near the clock (under ^), or start JARVIS again, to show it.",
+                    f"{self._name} is still running",
+                    f"Click the {self._name} icon near the clock (under ^), or start it again, to show it.",
                     orb_icon(self._bridge.stateColor),
                     5000,
                 )

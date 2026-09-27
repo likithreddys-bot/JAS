@@ -48,6 +48,7 @@ class AssistantReply:
 class ToolStarted:
     step_id: int
     label: str
+    tool: str = ""  # the tool's name, so the UI can react to what kind of work it is
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,7 @@ class ToolFinished:
     label: str
     ok: bool
     error: str = ""
+    tool: str = ""
 
 
 @dataclass(frozen=True)

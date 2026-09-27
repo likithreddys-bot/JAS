@@ -31,7 +31,7 @@ _DEFAULT_COOLDOWN = 60
 class GeminiBrain:
     def __init__(
         self, api_key: str, models: str, executor: ToolExecutor | None = None, thinking: str = "minimal",
-        user_name: str = "", memory: Callable[[], str] = lambda: "",
+        user_name: str = "", memory: Callable[[], str] = lambda: "", assistant_name: str = "JAS",
     ) -> None:
         """`models` is a comma-separated priority list, e.g. "gemini-3.1-flash-lite,gemini-3-flash-preview"."""
         if not api_key:
@@ -49,6 +49,7 @@ class GeminiBrain:
         self._thinking = types.ThinkingConfig(thinking_level=thinking.upper()) if thinking else None
         self._executor = executor
         self._user_name = user_name
+        self._assistant_name = assistant_name
         self._memory = memory
         self._tools = None
         if executor:
@@ -66,7 +67,8 @@ class GeminiBrain:
             self._history = []
         contents = self._history + [types.Content(role="user", parts=[types.Part.from_text(text=text)])]
         config = types.GenerateContentConfig(
-            system_instruction=system_prompt(self._executor is not None, self._user_name, self._memory()),
+            system_instruction=system_prompt(self._executor is not None, self._user_name, self._memory(),
+                                             self._assistant_name),
             tools=self._tools,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             thinking_config=self._thinking,

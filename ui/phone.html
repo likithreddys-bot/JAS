@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0B0E14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>{{NAME}}</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="icon" href="/icon-192.png">
+<style>
+  :root { --accent:#FFC46B; --skin:#F4E6CB; --ink:#12151E; --glow:0; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; overscroll-behavior:none; }
+  body { margin:0; background:#0B0E14; color:#E8ECF4; overflow:hidden;
+         font-family:'Segoe UI Variable Display','Segoe UI',system-ui,-apple-system,sans-serif;
+         display:flex; flex-direction:column; align-items:center;
+         padding:max(18px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom)); }
+
+  /* Edge lighting: the whole screen glows in JAS's colour while it is listening or working. */
+  .edge { position:fixed; inset:0; pointer-events:none; z-index:5; opacity:var(--glow);
+          transition:opacity .45s ease; }
+  .edge span { position:absolute; }
+  .edge .t { top:0; left:0; right:0; height:120px;
+             background:linear-gradient(to bottom, color-mix(in srgb,var(--accent) 55%,transparent), transparent); }
+  .edge .b { bottom:0; left:0; right:0; height:120px;
+             background:linear-gradient(to top, color-mix(in srgb,var(--accent) 55%,transparent), transparent); }
+  .edge .l { top:0; bottom:0; left:0; width:70px;
+             background:linear-gradient(to right, color-mix(in srgb,var(--accent) 45%,transparent), transparent); }
+  .edge .r { top:0; bottom:0; right:0; width:70px;
+             background:linear-gradient(to left, color-mix(in srgb,var(--accent) 45%,transparent), transparent); }
+  .edge.pulse { animation:breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe { 0%,100% { opacity:calc(var(--glow)*.55); } 50% { opacity:var(--glow); } }
+
+  .stage { position:relative; width:min(78vw,300px); aspect-ratio:1; margin:6px 0 2px;
+           display:flex; align-items:center; justify-content:center; }
+  .halo { position:absolute; inset:-14%; border-radius:50%;
+          background:radial-gradient(circle, color-mix(in srgb,var(--accent) 34%,transparent) 30%, transparent 68%);
+          animation:halo 3.6s ease-in-out infinite; }
+  @keyframes halo { 0%,100% { transform:scale(.94); opacity:.75; } 50% { transform:scale(1.03); opacity:1; } }
+  svg.face { width:100%; height:100%; overflow:visible; }
+
+  .name { font-size:14px; letter-spacing:6px; font-weight:600; margin:10px 0 3px; }
+  .label { color:#9AA3B5; font-size:13px; min-height:18px; letter-spacing:.3px; }
+
+  .talk { width:100%; max-width:480px; margin-top:14px; flex:1; overflow-y:auto; }
+  .bubble { background:#141A26; border:1px solid #1E2634; border-radius:16px; padding:11px 14px;
+            margin-bottom:9px; font-size:15px; line-height:1.45; animation:rise .25s ease; }
+  .bubble.you { background:#1B2432; color:#C9D3E4; }
+  .bubble .who { display:block; font-size:10px; letter-spacing:1.4px; color:#7C8699; margin-bottom:3px; }
+  @keyframes rise { from { opacity:0; transform:translateY(6px); } }
+
+  /* The level meter: JAS is always listening, and this shows it hearing you. */
+  .level { display:flex; align-items:flex-end; gap:4px; height:26px; margin:8px 0 2px; }
+  .level i { width:4px; border-radius:2px; background:var(--accent); height:4px;
+             transition:height .09s ease-out; opacity:.85; }
+  .tip { color:#7C8699; font-size:12px; min-height:16px; }
+  .controls { display:flex; gap:10px; margin-top:8px; }
+  .chip { background:#141A26; border:1px solid #263041; color:#C9D3E4; border-radius:999px;
+          padding:9px 18px; font-size:13px; }
+  .chip.off { background:var(--accent); color:#10131A; border-color:transparent; }
+
+  form { display:flex; gap:8px; width:100%; max-width:480px; padding-top:12px; }
+  input { flex:1; background:#141A26; border:1px solid #263041; color:#E8ECF4; border-radius:14px;
+          padding:13px 14px; font-size:16px; outline:none; }
+  input:focus { border-color:var(--accent); }
+  button.go { background:var(--accent); color:#10131A; border:0; border-radius:14px; padding:0 20px;
+              font-size:16px; font-weight:600; }
+  button.go:disabled { opacity:.45; }
+</style></head>
+<body>
+<div class="edge" id="edge"><span class="t"></span><span class="b"></span><span class="l"></span><span class="r"></span></div>
+
+<div class="stage">
+  <div class="halo" id="halo"></div>
+  <svg class="face" viewBox="0 0 200 200" id="svg">
+    <defs>
+      <radialGradient id="ball" cx="36%" cy="30%" r="72%">
+        <stop offset="0%"   id="lit"/>
+        <stop offset="55%"  id="mid"/>
+        <stop offset="100%" id="dim"/>
+      </radialGradient>
+      <clipPath id="inside"><circle cx="100" cy="100" r="76"/></clipPath>
+    </defs>
+
+    <!-- Saturn's rings sit outside the sphere -->
+    <g id="rings" opacity="0" transform="rotate(-18 100 100)">
+      <ellipse cx="100" cy="100" rx="104" ry="29" fill="none" stroke-width="3" id="ring1"/>
+      <ellipse cx="100" cy="100" rx="92"  ry="25" fill="none" stroke-width="1.8" id="ring2"/>
+    </g>
+
+    <circle cx="100" cy="100" r="76" fill="url(#ball)"/>
+    <circle cx="100" cy="100" r="76" fill="none" stroke-width="1.5" id="rim"/>
+
+    <g clip-path="url(#inside)">
+      <g id="craters" opacity="0"></g>
+      <g id="bands" opacity="0"></g>
+      <g id="seas" opacity="0"></g>
+    </g>
+
+    <!-- brows -->
+    <g id="brows" stroke="var(--ink)" stroke-width="4.6" stroke-linecap="round" fill="none">
+      <path id="browL" d="M56 62 Q72 54 88 62"/>
+      <path id="browR" d="M112 62 Q128 54 144 62"/>
+    </g>
+
+    <!-- eyes: white, dark pupil, catch-light -->
+    <g id="eyes">
+      <g id="eyeL"><ellipse cx="72" cy="103" rx="21" ry="21" fill="#fff"/>
+        <circle id="pupL" cx="72" cy="103" r="10.5" fill="var(--ink)"/>
+        <circle id="sparkL" cx="68" cy="99" r="3.2" fill="#fff"/></g>
+      <g id="eyeR"><ellipse cx="128" cy="103" rx="21" ry="21" fill="#fff"/>
+        <circle id="pupR" cx="128" cy="103" r="10.5" fill="var(--ink)"/>
+        <circle id="sparkR" cx="124" cy="99" r="3.2" fill="#fff"/></g>
+    </g>
+    <!-- the closed / smiling line, shown as the eyes shut -->
+    <g id="shut" opacity="0" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" fill="none">
+      <path id="shutL" d="M53 103 Q72 109 91 103"/>
+      <path id="shutR" d="M109 103 Q128 109 147 103"/>
+    </g>
+  </svg>
+</div>
+
+<div class="name">{{NAME}}</div>
+<div class="label" id="label">connecting…</div>
+
+<div class="talk" id="talk"></div>
+
+<div class="level" id="level"></div>
+<div class="tip" id="tip">starting…</div>
+<div class="controls">
+  <button class="chip" id="pause">Pause</button>
+  <button class="chip" id="hide">Hide</button>
+</div>
+
+<form id="form" autocomplete="off">
+  <input id="text" placeholder="or type…" enterkeyhint="send">
+  <button class="go" id="send">Go</button>
+</form>
+</body></html>

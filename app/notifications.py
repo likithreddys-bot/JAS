@@ -6,6 +6,7 @@ import logging
 log = logging.getLogger("jarvis.notifications")
 
 _toaster = None
+APP_NAME = "JAS"
 
 
 def notify(title: str, text: str) -> bool:
@@ -16,7 +17,7 @@ def notify(title: str, text: str) -> bool:
         from windows_toasts import Toast, WindowsToaster
 
         if _toaster is None:
-            _toaster = WindowsToaster("JARVIS")
+            _toaster = WindowsToaster(APP_NAME)
         toast = Toast()
         toast.text_fields = [title, text]
         _toaster.show_toast(toast)

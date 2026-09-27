@@ -47,9 +47,27 @@ class BrowserSession:
     def close(self) -> None:
         self._shutdown()
 
+    def _retrying(self, work):
+        """Run `work(page)`, and if the browser died mid-operation, restart it and try once more.
+
+        `page()` already replaces a context that is gone, but a headless browser can also be
+        killed part-way through a navigation, which surfaced as "Target page, context or browser
+        has been closed" in the middle of a search.
+        """
+        try:
+            return work(self.page())
+        except PlaywrightError as exc:
+            if "closed" not in str(exc).lower():
+                raise
+            log.info("Research browser died mid-request; restarting and retrying once")
+            self._shutdown()
+            return work(self.page())
+
     def web_search(self, query: str) -> dict:
+        return self._retrying(lambda page: self._web_search(page, query))
+
+    def _web_search(self, page: Page, query: str) -> dict:
         # DuckDuckGo's HTML page: Google shows captchas to automated browsers.
-        page = self.page()
         page.goto(f"https://html.duckduckgo.com/html/?q={quote_plus(query)}", wait_until="domcontentloaded", timeout=30_000)
         results = page.evaluate("""() => [...document.querySelectorAll('.result')].slice(0, 6).map(r => ({
             title: r.querySelector('.result__a')?.textContent.trim() || '',
@@ -62,7 +80,9 @@ class BrowserSession:
         return {"query": query, "results": results}
 
     def read(self, url: str, limit: int = 4000) -> dict:
-        page = self.page()
+        return self._retrying(lambda page: self._read(page, url, limit))
+
+    def _read(self, page: Page, url: str, limit: int = 4000) -> dict:
         page.goto(url, wait_until="domcontentloaded", timeout=30_000)
         time.sleep(1.0)  # let script-rendered content appear
         text = " ".join(page.evaluate("() => document.body ? document.body.innerText : ''").split())

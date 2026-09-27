@@ -21,6 +21,9 @@ from app.config.settings import PROJECT_ROOT, Settings, get_settings
 from app.core.jarvis import Jarvis
 from app.core.state.states import JarvisState
 from app.google.auth import load_credentials
+from app.learning import Learner
+from app.lockart import set_lock_screen, set_wallpaper
+from app.lockscreen import LockWatcher
 from app.memory.store import MemoryStore
 from app.routines.briefing import build_briefing
 from app.tools.assistant import assistant_tools
@@ -28,16 +31,21 @@ from app.tools.google_tools import GoogleServices, google_tools
 from app.tools.memory_tools import memory_tools
 from app.notifications import notify
 from app.reminders import ReminderService
+from app.beacon import Beacon
+from app.remote import RemoteControl, local_host, pin_for
 from app.wellbeing import ActivityMonitor
 from app.tools.browser import browser_tools
 from app.tools.browser.session import BrowserSession
 from app.tools.computer import computer_tools
+from app.tools.computer import session
 from app.tools.computer.apps import AppIndex
+from app.tools.excel import excel_tools
 from app.tools.executor import ToolExecutor
 from app.tools.files import FileAccess, file_tools, vscode_folders
 from app.tools.screen import screen_tools
 from app.voice import quick
 from app.voice.audio.microphone import Microphone
+from app.voice.bargein import BargeIn
 from app.voice.ducking import AudioDucker
 from app.voice.listen.recorder import UtteranceRecorder
 from app.voice.pipeline import (
@@ -56,6 +64,7 @@ from ui import hotkey
 from ui.activity import ActivityLog
 from ui.bridge import UiBridge
 from ui.dashboard import DashboardBridge
+from ui.screenglow import ScreenGlow
 from ui.single_instance import InstanceServer, notify_running_instance
 from ui.tray import Tray
 
@@ -63,6 +72,27 @@ log = logging.getLogger("jarvis")
 
 ORB_QML = PROJECT_ROOT / "ui" / "qml" / "Orb.qml"
 DASHBOARD_QML = PROJECT_ROOT / "ui" / "qml" / "Dashboard.qml"
+SCREEN_GLOW_QML = PROJECT_ROOT / "ui" / "qml" / "ScreenGlow.qml"
+
+
+def _wav_to_audio(wav: bytes):
+    """The phone sends 16 kHz mono WAV, which is exactly what Whisper wants."""
+    import io
+    import wave
+
+    import numpy as np
+
+    with wave.open(io.BytesIO(wav), "rb") as clip:
+        frames = clip.readframes(clip.getnframes())
+    return np.frombuffer(frames, dtype=np.int16)
+
+
+def _show_face(settings: Settings, mood: str) -> bool:
+    """JAS's face on both the lock screen and the desktop, so its mood follows you either way."""
+    where = settings.data_dir / "lockscreen"
+    locked = set_lock_screen(mood, where, settings.user_name, settings.assistant_name)
+    paper = set_wallpaper(mood, where, settings.user_name, settings.assistant_name)
+    return locked or paper
 
 
 def start_voice(core: Jarvis, settings: Settings, services: list[WakeWordService],
@@ -79,12 +109,14 @@ def start_voice(core: Jarvis, settings: Settings, services: list[WakeWordService
                 settings.picovoice_access_key, settings.porcupine_keyword, settings.porcupine_sensitivity
             )
         except Exception as exc:
-            log.warning("Porcupine unavailable (%s); falling back to 'Hey Jarvis'", exc)
-            wake_problem = f"{exc}. Using \"Hey Jarvis\" instead."
+            log.warning("Porcupine unavailable (%s); falling back to the openWakeWord model", exc)
+            wake_problem = f"{exc}. Listening for \"Jarvis\" instead."
     try:
         if settings.wake_word_engine.strip().lower() != "porcupine" or wake_problem:
-            detector = load_openwakeword(settings.wake_word_model, settings.wake_word_threshold)
-        speaker = Speaker(settings.tts_voice, settings.models_dir / "piper", settings.tts_speed)
+            detector = load_openwakeword(settings.wake_word_model, settings.wake_word_threshold,
+                                         settings.models_dir / "openwakeword")
+        speaker = Speaker(settings.tts_voice, settings.models_dir / "piper", settings.tts_speed,
+                          settings.tts_voice_higher)
         speaker.prepare(ACK_PHRASE, NOT_UNDERSTOOD, STOPPED_PHRASE, WORKING_PHRASE)
     except Exception as exc:
         log.exception("Voice failed to load")
@@ -113,15 +145,22 @@ def start_voice(core: Jarvis, settings: Settings, services: list[WakeWordService
     browser = BrowserSession(settings.browser_profile_dir)
     files = FileAccess(settings.files_root, settings.data_dir / "backups", settings.data_dir / "notes")
     tools = (computer_tools(app_index) + browser_tools(browser, settings.chrome_profile) + file_tools(files)
-             + memory_tools(memory, settings.home_city, refresh_vocabulary) + assistant_tools(core))
+             + memory_tools(memory, settings.home_city, refresh_vocabulary) + assistant_tools(core)
+             + excel_tools(settings.data_dir / "backups", files.resolve))
     tools += google_tools(google)
     if settings.gemini_api_key:
         vision = GeminiVision(settings.gemini_api_key, settings.gemini_model)
         tools += screen_tools(vision.ask, vision.locate, hide_ui)
     executor = ToolExecutor(core, tools)
     executor_holder["executor"] = executor
+    learner = Learner(core, memory)
+
+    def context_with_lessons() -> str:
+        """What JAS knows about the user, plus what it has learned from its own mistakes."""
+        return "\n\n".join(part for part in (memory.context(), learner.lessons()) if part)
+
     try:
-        respond = create_responder(settings, executor, memory.context)
+        respond = create_responder(settings, executor, context_with_lessons)
     except BrainError as exc:
         log.warning("%s Falling back to echo replies.", exc)
         respond = echo_reply
@@ -147,11 +186,34 @@ def start_voice(core: Jarvis, settings: Settings, services: list[WakeWordService
         core, speaker, transcriber, recorder, respond=respond,
         quick=lambda text: quick.run(text, executor.run), follow_up_seconds=settings.follow_up_seconds,
         max_listen_seconds=settings.listen_max_seconds,
+        match_voice=settings.voice_matches_speaker,
         on_exchange=memory.log_exchange,
         briefing=morning_briefing,
         after_briefing=start_the_day,
     )
+    # Saying "stop" while JAS is answering must actually stop it. Its own second recorder, so it
+    # never competes with the one capturing the user's request.
+    barge_vad = VAD()  # Silero VAD carries state; sharing one with the main recorder corrupts both
+    barge_in = BargeIn(core, transcriber, UtteranceRecorder(
+        speech_prob=lambda frame: float(barge_vad.predict(frame, frame_size=640)),
+        reset_vad=barge_vad.reset_states,
+        end_silence=0.6, start_timeout=0.8, max_duration=4.0,
+    ))
+    if settings.remote_enabled:
+        remote = RemoteControl(core, pin_for(memory), settings.remote_port,
+                               settings.assistant_name, render=speaker.render,
+                               transcribe=lambda wav: transcriber.transcribe(_wav_to_audio(wav)),
+                               certificates=settings.data_dir / "certificates")
+        remote.start()
+        # So the phone finds this laptop after the router changes its address.
+        Beacon(settings.remote_port, local_host()).start()
+        log.info("Phone remote: open %s and enter PIN %s", remote.address, pin_for(memory))
     AudioDucker(core.bus)
+    LockWatcher(
+        core, session.is_locked, f"Hey {settings.user_name}, I'm ready.",
+        bad_passwords=session.bad_password_count,
+        set_lock_face=lambda mood: _show_face(settings, mood),
+    )
     executor.set_confirmer(pipeline.ask_yes_no)
 
     device = settings.microphone_device or None
@@ -166,7 +228,8 @@ def start_voice(core: Jarvis, settings: Settings, services: list[WakeWordService
         timer.daemon = True
         timer.start()
     service = WakeWordService(
-        core.bus, Microphone(device), detector, core.state.current, listen_sink=pipeline.feed
+        core.bus, Microphone(device), detector, core.state.current, listen_sink=pipeline.feed,
+        busy_sink=barge_in.feed
     )
     services.append(service)
     service.start()
@@ -178,7 +241,7 @@ def main() -> int:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
 
     app = QApplication(sys.argv)
-    app.setApplicationName("JARVIS")
+    app.setApplicationName(settings.assistant_name)
     app.setQuitOnLastWindowClosed(False)  # lives in the tray
 
     lock = QLockFile(str(settings.data_dir / "jarvis.lock"))
@@ -188,7 +251,7 @@ def main() -> int:
         return 0
 
     core = Jarvis()
-    bridge = UiBridge(core)
+    bridge = UiBridge(core, settings.assistant_name, settings.wake_phrase)
     memory = MemoryStore(settings.data_dir / "memory.db")
     google = GoogleServices(lambda: load_credentials(settings.google_client_file, settings.google_token_file))
     activity = ActivityLog(core.bus)
@@ -223,18 +286,29 @@ def main() -> int:
         log.warning("Could not listen for relaunches: %s", instance_server.errorString())
 
     services: list[WakeWordService] = []
+    try:
+        screen_glow = ScreenGlow(core, SCREEN_GLOW_QML)
+    except Exception:  # the glow is a nicety; never let it stop JARVIS starting
+        log.exception("Screen glow unavailable")
+        screen_glow = None
+
     @contextlib.contextmanager
     def hidden_orb():
-        """Hide the orb while the screen is captured, so JARVIS doesn't photograph itself."""
+        """Hide JARVIS's own windows while the screen is captured, so it doesn't photograph itself."""
         visible = window.isVisible()
         if visible:
             QMetaObject.invokeMethod(window, "hide", Qt.QueuedConnection)
+        if screen_glow:
+            screen_glow.hide_for_capture(True)
+        if visible or screen_glow:
             time.sleep(0.25)
         try:
             yield
         finally:
             if visible:
                 QMetaObject.invokeMethod(window, "show", Qt.QueuedConnection)
+            if screen_glow:
+                screen_glow.hide_for_capture(False)
 
     def start_voice_safely() -> None:
         try:

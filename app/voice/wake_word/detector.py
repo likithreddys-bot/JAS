@@ -43,18 +43,32 @@ class WakeWordDetector:
         self._reset()
 
 
-def load_openwakeword(model_name: str, threshold: float) -> WakeWordDetector:
-    """Load a pre-trained openWakeWord model (downloaded once on first use)."""
+def load_openwakeword(model_name: str, threshold: float, models_dir: Path | None = None) -> WakeWordDetector:
+    """Load an openWakeWord model.
+
+    `model_name` is either a pre-trained name ("hey_jarvis", downloaded once on first use) or the
+    file name of a model shipped with JARVIS in `models_dir` ("jarvis_v1.onnx"), which is how the
+    single-word "Jarvis" is supported — openWakeWord has no pre-trained model for it.
+    """
     import openwakeword
     from openwakeword.model import Model
     from openwakeword.utils import download_models
 
-    models_dir = Path(openwakeword.__file__).parent / "resources" / "models"
-    if not any(models_dir.glob(f"{model_name}*.onnx")):
-        log.info("Downloading wake-word model %r (one time)", model_name)
-        download_models(model_names=[model_name])
+    built_in = Path(openwakeword.__file__).parent / "resources" / "models"
+    if model_name.endswith(".onnx"):
+        path = (models_dir or Path()) / model_name
+        if not path.exists():
+            raise FileNotFoundError(f"Wake-word model {path} is missing")
+        if not (built_in / "melspectrogram.onnx").exists():
+            download_models(model_names=[])  # the shared feature extractors every model needs
+        wake_models = [str(path)]
+    else:
+        if not any(built_in.glob(f"{model_name}*.onnx")):
+            log.info("Downloading wake-word model %r (one time)", model_name)
+            download_models(model_names=[model_name])
+        wake_models = [model_name]
 
-    model = Model(wakeword_models=[model_name], inference_framework="onnx")
+    model = Model(wakeword_models=wake_models, inference_framework="onnx")
     key = next(iter(model.models))
     log.info("Wake-word model %r loaded (threshold %.2f)", key, threshold)
     return WakeWordDetector(

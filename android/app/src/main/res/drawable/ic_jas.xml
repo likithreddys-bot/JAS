@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher and notification mark: the sphere with its two eyes. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#FFC46B"
+        android:pathData="M24,5a19,19 0 1,0 0.1,0z"/>
+    <path android:fillColor="#12151E"
+        android:pathData="M17.5,25.5a4.6,4.6 0 1,0 0.1,0z"/>
+    <path android:fillColor="#12151E"
+        android:pathData="M30.5,25.5a4.6,4.6 0 1,0 0.1,0z"/>
+    <path android:strokeColor="#12151E" android:strokeWidth="2.2"
+        android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M13,17.5 Q17.5,14.8 22,17.5"/>
+    <path android:strokeColor="#12151E" android:strokeWidth="2.2"
+        android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M26,17.5 Q30.5,14.8 35,17.5"/>
+</vector>

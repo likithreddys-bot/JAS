@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS exchanges (id INTEGER PRIMARY KEY, at TEXT NOT NULL, 
 CREATE TABLE IF NOT EXISTS reminders (id INTEGER PRIMARY KEY, created TEXT NOT NULL, due TEXT NOT NULL, text TEXT NOT NULL,
                                       repeat TEXT NOT NULL DEFAULT 'none', done_at TEXT);
 CREATE TABLE IF NOT EXISTS notes (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS outcomes (id INTEGER PRIMARY KEY, at TEXT NOT NULL, tool TEXT NOT NULL,
+                                     ok INTEGER NOT NULL, detail TEXT NOT NULL DEFAULT '',
+                                     request TEXT NOT NULL DEFAULT '');
 """
 REPEATS = ("none", "daily", "weekdays", "weekly")
 
@@ -49,6 +52,27 @@ class MemoryStore:
     def set_note(self, key: str, value: str) -> None:
         self._query("INSERT INTO notes (key, value) VALUES (?, ?) "
                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
+
+    # --- outcomes: what JAS tried, and whether it worked ------------------------
+
+    def record_outcome(self, tool: str, ok: bool, detail: str = "", request: str = "") -> None:
+        self._query("INSERT INTO outcomes (at, tool, ok, detail, request) VALUES (?, ?, ?, ?, ?)",
+                    _now(), tool, 1 if ok else 0, detail[:400], request[:200])
+
+    def tool_reliability(self, since_days: int = 30) -> list[tuple[str, int, int]]:
+        """(tool, successes, failures) for each tool JAS has used recently."""
+        cutoff = (datetime.now() - timedelta(days=since_days)).isoformat(timespec="seconds")
+        return [(row[0], row[1], row[2]) for row in self._query(
+            "SELECT tool, SUM(ok), COUNT(*) - SUM(ok) FROM outcomes WHERE at >= ? "
+            "GROUP BY tool ORDER BY COUNT(*) - SUM(ok) DESC", cutoff)]
+
+    def repeated_failures(self, minimum: int = 2, since_days: int = 30) -> list[tuple[str, str, int]]:
+        """(tool, error, times) for mistakes JAS has now made more than once."""
+        cutoff = (datetime.now() - timedelta(days=since_days)).isoformat(timespec="seconds")
+        return [(row[0], row[1], row[2]) for row in self._query(
+            "SELECT tool, detail, COUNT(*) FROM outcomes WHERE ok = 0 AND detail != '' AND at >= ? "
+            "GROUP BY tool, detail HAVING COUNT(*) >= ? ORDER BY COUNT(*) DESC LIMIT 8",
+            cutoff, minimum)]
 
     # --- facts -----------------------------------------------------------------
 

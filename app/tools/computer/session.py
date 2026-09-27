@@ -6,6 +6,7 @@ nothing while looking like it worked. `LockWorkStation` is the real call.
 from __future__ import annotations
 
 import ctypes
+import getpass
 import time
 from ctypes import wintypes
 
@@ -34,3 +35,37 @@ def lock(timeout: float = 5.0) -> bool:
             return True
         time.sleep(0.1)
     return False
+
+
+class _UserInfo3(ctypes.Structure):
+    """USER_INFO_3, for the one field that matters: how many times the password was got wrong."""
+    _fields_ = [("name", wintypes.LPWSTR), ("password", wintypes.LPWSTR),
+                ("password_age", wintypes.DWORD), ("priv", wintypes.DWORD),
+                ("home_dir", wintypes.LPWSTR), ("comment", wintypes.LPWSTR),
+                ("flags", wintypes.DWORD), ("script_path", wintypes.LPWSTR),
+                ("auth_flags", wintypes.DWORD), ("full_name", wintypes.LPWSTR),
+                ("usr_comment", wintypes.LPWSTR), ("parms", wintypes.LPWSTR),
+                ("workstations", wintypes.LPWSTR), ("last_logon", wintypes.DWORD),
+                ("last_logoff", wintypes.DWORD), ("acct_expires", wintypes.DWORD),
+                ("max_storage", wintypes.DWORD), ("units_per_week", wintypes.DWORD),
+                ("logon_hours", ctypes.POINTER(wintypes.BYTE)), ("bad_pw_count", wintypes.DWORD),
+                ("num_logons", wintypes.DWORD), ("logon_server", wintypes.LPWSTR),
+                ("country_code", wintypes.DWORD), ("code_page", wintypes.DWORD),
+                ("user_id", wintypes.DWORD), ("primary_group_id", wintypes.DWORD),
+                ("profile", wintypes.LPWSTR), ("home_dir_drive", wintypes.LPWSTR),
+                ("password_expired", wintypes.DWORD)]
+
+
+def bad_password_count() -> int | None:
+    """How many times this account's password has been got wrong. None if Windows won't say.
+
+    Readable for your own account without administrator rights, unlike the Security event log.
+    """
+    netapi = ctypes.WinDLL("netapi32")
+    buffer = ctypes.POINTER(_UserInfo3)()
+    if netapi.NetUserGetInfo(None, getpass.getuser(), 3, ctypes.byref(buffer)) != 0:
+        return None
+    try:
+        return int(buffer.contents.bad_pw_count)
+    finally:
+        netapi.NetApiBufferFree(buffer)

@@ -25,6 +25,7 @@ from app.core.jarvis import Jarvis
 from app.brain.sentences import sentences
 from app.core.state.states import JarvisState as S
 from app.tools.base import TaskCancelled
+from app.voice import pitch
 from app.voice.listen.recorder import UtteranceRecorder
 
 log = logging.getLogger("jarvis.voice.pipeline")
@@ -33,12 +34,20 @@ ACK_PHRASE = "Yes?"
 NOT_UNDERSTOOD = "Sorry, I didn't catch that."
 FAILURE_PHRASE = "Sorry, something went wrong."
 STOPPED_PHRASE = "Okay, stopped."
-WORKING_PHRASE = "On it."  # said as soon as the first action starts, so the user isn't left in silence
+WORKING_PHRASE = "On it."
+DID_IT = "Done."
+NOTHING_TO_SAY = "Sorry, I didn't get that. Could you say it again?"  # said as soon as the first action starts, so the user isn't left in silence
 CONTINUE_SECONDS = 3.0  # extra listening when the user seems mid-sentence
-MAX_CONTINUATIONS = 2
+MAX_CONTINUATIONS = 3
 # A sentence ending like this is probably unfinished ("play some...", "open the...", "uhm").
-_UNFINISHED = re.compile(r"(\.\.\.|,|\b(and|or|but|so|because|the|a|an|to|of|for|with|my|some|"
-                         r"uh|um|uhm|hmm|mm|like|also))\W*$", re.I)
+_UNFINISHED = re.compile(
+    r"(?:\.\.\.|,)\s*$"  # trailing ellipsis or comma
+    # words that never end a sentence, even if the transcriber put a full stop after them
+    r"|\b(?:and|or|but|so|because|the|a|an|to|of|for|with|my|your|our|some|any|than|into|about|while|"
+    r"uh|um|uhm|hmm|mm|like|also)\W*$"
+    # words that often trail off mid-thought, but are fine once a sentence has actually ended
+    r"|\b(?:then|if|when|from|in|on|at|that|this|these|those|is|are|was|were|will|would|can|could|"
+    r"should|just|very|really)\s*$", re.I)
 TODO_REQUEST = ("The user just told you their to-do list for today: \"{heard}\". Save each separate task "
                 "with add_todo, then confirm in one short sentence.")
 # Handled locally, without the LLM: end the turn quietly.
@@ -72,6 +81,7 @@ class VoicePipeline:
         after_briefing: Callable[[], str] | None = None,
         max_listen_seconds: float = 15.0,
         follow_up_seconds: float = 0.0,
+        match_voice: bool = True,
     ) -> None:
         self._core = core
         self._speaker = speaker
@@ -84,11 +94,14 @@ class VoicePipeline:
         self._after_briefing = after_briefing  # e.g. start morning music; returns a closing line
         self._max_wait = max_listen_seconds + LISTEN_WAIT_SLACK
         self._follow_up_seconds = follow_up_seconds
+        self._match_voice = match_voice  # answer in a voice near the speaker's own pitch
         self._turns: queue.Queue[str] = queue.Queue()
         core.bus.subscribe(StateChanged, self._on_state)
         core.bus.subscribe(TaskInterrupted, self._on_interrupt)
         core.bus.subscribe(ToolStarted, self._on_tool_started)
         self._working_ack_armed = False
+        self._did_something = False
+        self._silent_stop = False
         threading.Thread(target=self._worker, name="voice-pipeline", daemon=True).start()
 
     def feed(self, frame: np.ndarray) -> None:
@@ -110,12 +123,16 @@ class VoicePipeline:
             self._recorder.cancel()
 
     def _on_tool_started(self, event: ToolStarted) -> None:
+        self._did_something = True
         # Runs on the pipeline thread just before the first tool of a reply: a quick "On it."
         if self._working_ack_armed:
             self._working_ack_armed = False
-            self._speaker.speak(WORKING_PHRASE)
+            self._speak(WORKING_PHRASE)
 
     def _on_interrupt(self, event: TaskInterrupted) -> None:
+        # Pausing is meant to be silent: announcing "Okay, stopped." to someone who just muted
+        # JAS is the opposite of what they asked for.
+        self._silent_stop = "pause" in event.reason.lower()
         self._speaker.stop()
         self._recorder.cancel()
 
@@ -134,14 +151,23 @@ class VoicePipeline:
                     log.exception("Voice turn failed")
                     self._fail(str(exc) or type(exc).__name__)
                     self._say(FAILURE_PHRASE)
-            if self._core.cancelled.is_set() and self._core.state.current is S.STANDBY:
+            self._core.quiet = False
+            if (self._core.cancelled.is_set() and self._core.state.current is S.STANDBY
+                    and not self._silent_stop and not self._core.paused):
                 self._say(STOPPED_PHRASE)
+            self._silent_stop = False
 
     def _say(self, phrase: str) -> None:
         try:
-            self._speaker.speak(phrase)
+            self._speak(phrase)
         except Exception:
             log.exception("Could not speak %r", phrase)
+
+    def _speak(self, text: str) -> bool:
+        """Say it out loud, unless this answer belongs to the phone that asked for it."""
+        if self._core.quiet:
+            return True
+        return self._speaker.speak(text)
 
     def _turn(self, kind: str = "request") -> None:
         state = self._core.state
@@ -163,7 +189,7 @@ class VoicePipeline:
             return
 
         if kind == "request":
-            self._speaker.speak(ACK_PHRASE)
+            self._speak(ACK_PHRASE)
             self._recorder.begin()
             if not state.transition_from(S.WAKE_DETECTED, S.LISTENING):
                 self._recorder.cancel()
@@ -177,7 +203,7 @@ class VoicePipeline:
                 state.transition_from(S.WAKE_DETECTED, S.STANDBY)
                 return
             self._core.bus.publish(AssistantReply(text))
-            if not self._speaker.speak(text):
+            if not self._speak(text):
                 return
             if kind == "briefing" and first_today:
                 self._briefing_todos()
@@ -193,6 +219,7 @@ class VoicePipeline:
                 return
             if not state.transition_from(S.LISTENING, S.TRANSCRIBING):
                 return
+            self._match_the_speaker(audio)
             if not self._answer(self._transcribe_whole_thought(audio), follow_up):
                 return
             if self._core.rest_requested:  # "go offline" was the request
@@ -205,6 +232,18 @@ class VoicePipeline:
         for current in (S.RESPONDING, S.OBSERVING):
             if state.transition_from(current, S.STANDBY):
                 break
+
+    def _match_the_speaker(self, audio: np.ndarray) -> None:
+        """Answer in whichever of the two voices is closer to the pitch of whoever just spoke."""
+        if not self._match_voice or not hasattr(self._speaker, "use"):
+            return
+        try:
+            kind = pitch.voice_for(audio, getattr(self._speaker, "_kind", "lower"))
+        except Exception:
+            log.exception("Could not measure the speaker's pitch")
+            return
+        if kind:
+            self._speaker.use(kind)
 
     def _transcribe_whole_thought(self, audio: np.ndarray) -> str:
         """Transcribe; if it sounds unfinished (the user paused to think), keep listening and append."""
@@ -257,7 +296,7 @@ class VoicePipeline:
         closing = self._after_briefing() if self._after_briefing else ""
         if closing and self._enter_responding():
             self._core.bus.publish(AssistantReply(closing))
-            self._speaker.speak(closing)
+            self._speak(closing)
         for current in (S.RESPONDING, S.THINKING, S.OBSERVING):
             if state.transition_from(current, S.STANDBY):
                 break
@@ -276,7 +315,7 @@ class VoicePipeline:
                 state.transition_from(S.TRANSCRIBING, S.STANDBY, "no follow-up")
             elif state.transition_from(S.TRANSCRIBING, S.RESPONDING):
                 self._core.bus.publish(AssistantReply(NOT_UNDERSTOOD))
-                self._speaker.speak(NOT_UNDERSTOOD)
+                self._speak(NOT_UNDERSTOOD)
                 state.transition_from(S.RESPONDING, S.STANDBY)
             return False
         if not state.transition_from(S.TRANSCRIBING, S.THINKING):
@@ -288,8 +327,10 @@ class VoicePipeline:
                 if not self._enter_responding():
                     return False
                 self._core.bus.publish(AssistantReply(reply))
+                if not reply:  # e.g. locking the PC: do it and stay quiet
+                    return True
                 self._on_exchange(text, reply)
-                return self._speaker.speak(reply)
+                return self._speak(reply)
         if _normalize(text) in CANCEL_PHRASES:
             for current in (S.THINKING, S.OBSERVING):
                 if state.transition_from(current, S.STANDBY, "cancelled by user"):
@@ -297,6 +338,7 @@ class VoicePipeline:
             return False
 
         spoken = ""
+        self._did_something = False
         self._working_ack_armed = True
         for sentence in sentences(self._respond(prompt or text)):
             self._working_ack_armed = False  # the reply itself is starting
@@ -305,11 +347,18 @@ class VoicePipeline:
                 return False  # paused / cancelled mid-reply
             spoken = f"{spoken} {sentence}".strip()
             self._core.bus.publish(AssistantReply(spoken))
-            if not self._speaker.speak(sentence):
+            if not self._speak(sentence):
                 return False
         self._working_ack_armed = False
         if not spoken:
-            raise RuntimeError("Empty reply")
+            # The model sometimes ends a turn after its tool calls without saying anything. The
+            # work did happen, so an error state and "something went wrong" would be a lie.
+            log.info("The model said nothing; acknowledging the work instead")
+            spoken = DID_IT if self._did_something else NOTHING_TO_SAY
+            if not self._enter_responding():
+                return False
+            self._core.bus.publish(AssistantReply(spoken))
+            self._speak(spoken)
         self._on_exchange(text, spoken)
         return True
 
@@ -319,7 +368,7 @@ class VoicePipeline:
         if not self._enter_responding():
             raise TaskCancelled()
         self._core.bus.publish(AssistantReply(question))
-        self._speaker.speak(question)
+        self._speak(question)
         self._recorder.begin()
         if not state.transition_from(S.RESPONDING, S.LISTENING):
             self._recorder.cancel()

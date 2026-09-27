@@ -205,3 +205,20 @@ def test_wake_word_is_heard_while_busy_and_interrupts():
         assert interrupts[0].reason == "stopped by user" and core.cancelled.is_set()
     finally:
         svc.stop()
+
+
+def test_a_wake_word_model_can_be_a_file_shipped_with_jarvis(tmp_path):
+    """Single-word "Jarvis" has no pre-trained model, so it ships as an .onnx in data/models."""
+    import pytest
+
+    from app.config.settings import Settings
+    from app.voice.wake_word.detector import load_openwakeword
+
+    with pytest.raises(FileNotFoundError, match="is missing"):
+        load_openwakeword("not_here.onnx", 0.4, tmp_path)
+
+    models = Settings().models_dir / "openwakeword"
+    if not (models / "jarvis_v1.onnx").exists():
+        pytest.skip("community jarvis model not downloaded on this machine")
+    detector = load_openwakeword("jarvis_v1.onnx", 0.4, models)
+    assert detector._predict(np.zeros(1280, dtype=np.int16)) < 0.5  # silence is not a wake word

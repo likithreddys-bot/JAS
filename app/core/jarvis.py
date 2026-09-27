@@ -25,6 +25,7 @@ class Jarvis:
         self.cancelled = threading.Event()
         self.rest_requested = False  # rest once the current reply has been spoken
         self.announcement: str | None = None  # something JARVIS starts saying by itself
+        self.quiet = False  # the reply is going somewhere other than this laptop's speakers
         self.typed_request: str | None = None  # a request typed in the dashboard instead of spoken
         self.bus.subscribe(WakeWordDetected, self._on_wake_word)
         self.bus.subscribe(MicrophoneUnavailable, self._on_mic_unavailable)
@@ -47,11 +48,16 @@ class Jarvis:
                 return True
         return False
 
-    def ask_text(self, text: str) -> bool:
-        """Handle a typed request (dashboard) as if it had been spoken."""
+    def ask_text(self, text: str, answer_here: bool = True) -> bool:
+        """Handle a typed request (dashboard, phone) as if it had been spoken.
+
+        `answer_here` False means the reply belongs somewhere else - the phone that asked - so the
+        laptop stays quiet rather than talking to an empty room.
+        """
         if not text.strip():
             return False
         self.typed_request = text.strip()
+        self.quiet = not answer_here
         return self.activate("typed")
 
     def announce(self, text: str) -> bool:

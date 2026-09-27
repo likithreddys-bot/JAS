@@ -82,3 +82,26 @@ def test_vscode_project_folders_from_state(tmp_path):
     folders = vscode_folders(state)
     assert str(folders["AI-Tester"]).replace("/", "\\") == r"c:\Users\jaya lakshmi\AI-Tester"
     assert "digitap_replica" in folders
+
+
+def test_jarvis_can_rewrite_its_own_file_without_asking(tmp_path):
+    """Asking every time made it invent "_v2" files instead of editing what it had just made."""
+    from app.tools.base import Risk
+    from app.tools.files import FileAccess, file_tools
+
+    access = FileAccess(tmp_path, tmp_path / "backups", tmp_path / "notes")
+    tools = {t.name: t for t in file_tools(access)}
+    write = tools["write_file"]
+    page = tmp_path / "site" / "index.html"
+
+    assert write.risk_for({"path": str(page)}) is Risk.LOW  # brand new file
+    assert write.run(path=str(page), content="<h1>one</h1>").ok
+
+    assert write.risk_for({"path": str(page)}) is Risk.LOW  # its own work: no confirmation
+    result = write.run(path=str(page), content="<h1>two</h1>")
+    assert result.ok and page.read_text() == "<h1>two</h1>"
+    assert result.data["backup"], "a backup is still kept even though it didn't ask"
+
+    someone_elses = tmp_path / "notes.txt"
+    someone_elses.write_text("important")
+    assert write.risk_for({"path": str(someone_elses)}) is Risk.MEDIUM  # still asks for these

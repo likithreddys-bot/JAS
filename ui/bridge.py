@@ -20,11 +20,11 @@ from app.core.events.events import (
 )
 from app.core.jarvis import Jarvis
 from app.core.state.states import JarvisState
-from ui.theme import STATE_COLORS, STATE_FACES, STATE_LABELS
+from ui.theme import STATE_BODY, STATE_COLORS, STATE_FACES, STATE_LABELS
 
 LINGER_MS = 8000  # keep the last reply and steps visible for a moment after finishing
 GAZE_MS = 50  # how often the eyes check where the mouse is
-GAZE_REACH = 520.0  # px from the face at which the eyes are turned as far as they go
+GAZE_REACH = 380.0  # px from the face at which the eyes are turned as far as they go
 
 
 def gaze_direction(cursor: tuple[int, int], centre: tuple[int, int],
@@ -47,9 +47,11 @@ class UiBridge(QObject):
     menuRequested = Signal()
     _incoming = Signal(object)
 
-    def __init__(self, core: Jarvis) -> None:
+    def __init__(self, core: Jarvis, assistant_name: str = "JAS", wake_phrase: str = "Jarvis") -> None:
         super().__init__()
         self._core = core
+        self._name = assistant_name
+        self._wake_phrase = wake_phrase
         self._state = core.state.current
         self._caption = ""
         self._level = 0.0
@@ -118,6 +120,10 @@ class UiBridge(QObject):
         self._caption = text
         self.captionChanged.emit()
 
+    @Property(str, constant=True)
+    def assistantName(self) -> str:
+        return self._name
+
     @Property(str, notify=stateChanged)
     def state(self) -> str:
         return self._state.value
@@ -134,6 +140,16 @@ class UiBridge(QObject):
     def expression(self) -> str:
         """Which face JARVIS wears: calm, alert, listening, thinking, focused, warm, concerned, asleep."""
         return STATE_FACES[self._state]
+
+    @Property(str, notify=stateChanged)
+    def body(self) -> str:
+        """Which body is in the sky: sun, moon, mars, jupiter, saturn... or "" for an error."""
+        return STATE_BODY.get(self._state, "")
+
+    @Property(str, notify=stateChanged)
+    def sky(self) -> str:
+        """The sun and the moon bring a corona, stars and z's; the planets are just planets."""
+        return self.body if self.body in ("sun", "moon") else ""
 
     @Property(float, notify=gazeChanged)
     def gazeX(self) -> float:

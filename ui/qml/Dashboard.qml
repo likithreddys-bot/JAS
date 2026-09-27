@@ -11,7 +11,7 @@ Window {
     minimumWidth: 700
     minimumHeight: 520
     visible: false
-    title: "JARVIS"
+    title: bridge.assistantName
     color: "#0B0E14"
 
     readonly property string uiFont: "Segoe UI Variable Display"
@@ -51,7 +51,7 @@ Window {
                 Layout.alignment: Qt.AlignVCenter
             }
             Text {
-                text: "JARVIS"
+                text: bridge.assistantName
                 color: root.bright
                 font { family: root.uiFont; pixelSize: 17; weight: Font.DemiBold; letterSpacing: 3 }
             }

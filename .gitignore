@@ -5,3 +5,10 @@ __pycache__/
 .env
 logs/
 data/
+
+# Android build tooling downloaded on this machine (~1.5 GB), not part of the project
+tools/
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/

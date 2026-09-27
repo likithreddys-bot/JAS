@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">JAS</string>
+    <string name="connecting">connecting…</string>
+    <string name="not_set_up">enter the PIN JAS shows on the laptop</string>
+    <string name="host_hint">laptop address (leave empty to find it)</string>
+    <string name="pin_hint">PIN from the laptop</string>
+    <string name="show_jas">Show JAS on screen</string>
+    <string name="steps">The address is found on your network, so only the PIN is needed. Tap the button above. Android will ask for two things: the microphone, then permission to display over other apps. Allow both and tap it again — the face then floats on your home screen and listens.</string>
+    <string name="hide_jas">Hide the face</string>
+    <string name="type_hint">or type…</string>
+    <string name="send">Go</string>
+    <string name="pair_again">Pair again</string>
+    <string name="pair_again_ask">Forget this laptop’s certificate? Only do this if JAS says it is not the laptop you paired with — normally you never need it.</string>
+    <string name="pair_again_done">Forgotten. Tap Show JAS on screen to pair again.</string>
+</resources>

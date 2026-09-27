@@ -61,7 +61,7 @@ class ToolExecutor:
         for current in _ACTIVE:
             if state.transition_from(current, S.EXECUTING):
                 break
-        self._core.bus.publish(ToolStarted(step_id, label))
+        self._core.bus.publish(ToolStarted(step_id, label, name))
         log.info("Tool %s(%s) [%s risk]", name, args, risk.value)
         try:
             result = tool.run(**args)
@@ -69,7 +69,7 @@ class ToolExecutor:
             log.exception("Tool %s crashed", name)
             result = ToolResult(False, error=f"{type(exc).__name__}: {exc}")
         log.info("Tool %s -> %s", name, result.to_dict())
-        self._core.bus.publish(ToolFinished(step_id, label, result.ok, result.error))
+        self._core.bus.publish(ToolFinished(step_id, label, result.ok, result.error, name))
         state.transition_from(S.EXECUTING, S.OBSERVING)
         return result.to_dict()
 

@@ -37,11 +37,13 @@ class WakeWordService:
         detector: WakeWordDetector,
         initial_state: JarvisState,
         listen_sink: Callable[[np.ndarray], None] | None = None,
+        busy_sink: Callable[[np.ndarray], None] | None = None,
     ) -> None:
         self._bus = bus
         self._mic = microphone
         self._detector = detector
         self._listen_sink = listen_sink
+        self._busy_sink = busy_sink  # hears "stop" while JAS is talking or working
         self._state = initial_state
         self._wake = threading.Event()  # interrupts sleeps when state changes or on stop
         self._stopping = False
@@ -105,6 +107,8 @@ class WakeWordService:
                 continue
             if self._state not in (JarvisState.STANDBY, JarvisState.RESTING) and self._state not in BUSY_STATES:
                 continue  # e.g. LISTENING: the user is talking to us, not calling us
+            if self._state in BUSY_STATES and self._busy_sink:
+                self._busy_sink(frame)
             if self._reset_pending:
                 self._reset_pending = False
                 self._detector.reset()

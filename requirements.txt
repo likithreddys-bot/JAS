@@ -18,6 +18,10 @@ google-genai>=2.24,<3
 # Phase 5 — Computer control
 pyautogui>=0.9.54,<1
 mss>=10,<11
+psutil>=5.9,<8
+pywin32>=306
+winrt-Windows.Storage>=3,<4
+winrt-Windows.System.UserProfile>=3,<4
 
 # Phase 6 — Browser (drives the installed Google Chrome; no browser download)
 playwright>=1.63,<2

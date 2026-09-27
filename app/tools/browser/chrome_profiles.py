@@ -72,19 +72,28 @@ def open_profile(profile: Profile, url: str | None, timeout: float = 10.0) -> wi
     exe = chrome_exe()
     if exe is None:
         raise FileNotFoundError("Google Chrome is not installed")
-    before = {w.hwnd for w in windows.list_windows()}
+    # Titles as well as handles: when Chrome is already open the URL becomes a *tab*, so no new
+    # window appears and only the existing window's title changes. Reporting "no window appeared"
+    # for a tab that opened fine was the most common browser failure in the logs.
+    before = {w.hwnd: w.title for w in windows.list_windows()}
     args = [str(exe), f"--profile-directory={profile.directory}"] + ([url] if url else ["--new-window"])
     subprocess.Popen(args)
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         time.sleep(0.3)
-        new = [w for w in windows.list_windows() if w.hwnd not in before and w.process.lower() == "chrome"]
+        current = [w for w in windows.list_windows() if w.process.lower() == "chrome"]
+        new = [w for w in current if w.hwnd not in before]
         if new:
             return new[0]
+        changed = [w for w in current if w.hwnd in before and before[w.hwnd] != w.title]
+        if changed:
+            return changed[0]  # an existing window took the new tab
         front = windows.foreground_window()
         if url and front and front.process.lower() == "chrome" and time.monotonic() > end - timeout + 1.0:
-            return front  # opened as a tab in an existing window of that profile
-    return None
+            return front
+    # Chrome is running but nothing visibly moved: a tab in a background window still counts.
+    chrome = [w for w in windows.list_windows() if w.process.lower() == "chrome"]
+    return chrome[0] if (url and chrome) else None
 
 
 def pick(spoken: str, default: str = "") -> tuple[Profile | None, str]:

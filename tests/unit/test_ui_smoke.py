@@ -12,7 +12,7 @@ from app.config.settings import PROJECT_ROOT
 from app.core.jarvis import Jarvis
 from app.core.state.states import JarvisState as S
 from ui.bridge import UiBridge, gaze_direction
-from ui.theme import STATE_COLORS, STATE_FACES, STATE_LABELS
+from ui.theme import STATE_BODY, STATE_COLORS, STATE_FACES, STATE_LABELS
 
 
 @pytest.fixture(scope="module")
@@ -106,17 +106,17 @@ def test_tray_menu_actions_drive_core_and_window(app):
     app.processEvents()
 
     actions = {a.text(): a for a in tray.contextMenu().actions()}
-    assert {"Hide JARVIS", "Pause JARVIS", "Exit"} <= set(actions)
+    assert {"Hide JAS", "Pause JAS", "Exit"} <= set(actions)
 
-    actions["Pause JARVIS"].trigger()
+    actions["Pause JAS"].trigger()
     app.processEvents()
     assert core.paused
-    assert "Resume JARVIS" in [a.text() for a in tray.contextMenu().actions()]
+    assert "Resume JAS" in [a.text() for a in tray.contextMenu().actions()]
 
-    actions["Hide JARVIS"].trigger()
+    actions["Hide JAS"].trigger()
     app.processEvents()
     assert not window.isVisible()
-    assert "Show JARVIS" in [a.text() for a in tray.contextMenu().actions()]
+    assert "Show JAS" in [a.text() for a in tray.contextMenu().actions()]
 
     bridge.requestMenu()  # right-click on the orb opens the same menu
     app.processEvents()
@@ -171,7 +171,8 @@ def test_dashboard_loads_without_qml_warnings(app, tmp_path):
     warnings = []
     engine.warnings.connect(lambda ws: warnings.extend(w.toString() for w in ws))
     engine.rootContext().setContextProperty("dashboard", bridge)
-    engine.rootContext().setContextProperty("bridge", UiBridge(core))
+    orb_bridge = UiBridge(core)  # keep a reference: QML reads it while the window builds
+    engine.rootContext().setContextProperty("bridge", orb_bridge)
     engine.load(QUrl.fromLocalFile(str(PROJECT_ROOT / "ui" / "qml" / "Dashboard.qml")))
     app.processEvents()
 
@@ -181,3 +182,29 @@ def test_dashboard_loads_without_qml_warnings(app, tmp_path):
     app.processEvents()
     window.hide()
     assert warnings == []
+
+
+def test_sun_while_ready_and_moon_while_asleep(app):
+    """The orb is a sun when JARVIS is ready and a moon when it sleeps; everything else is neither."""
+    core = Jarvis()
+    bridge = UiBridge(core)
+    core.start()
+    app.processEvents()
+    assert bridge.sky == "sun"
+
+    core.pause()
+    app.processEvents()
+    assert bridge.sky == "moon"
+
+    core.resume()
+    core.state.transition(S.RESTING)
+    app.processEvents()
+    assert bridge.sky == "moon"
+
+    core.state.transition(S.WAKE_DETECTED)
+    core.state.transition(S.LISTENING)
+    app.processEvents()
+    assert bridge.sky == "", "listening is neither sun nor moon"
+
+    assert set(STATE_BODY) == set(S), "every state needs a body in the sky"
+    assert bridge.body == "earth", "listening is Earth"
