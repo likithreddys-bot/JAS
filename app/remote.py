@@ -7,8 +7,12 @@ phone is a remote instead: you type (or later speak) there, and the work happens
 Requests go through `core.ask_text`, the same path the dashboard uses, so the phone gets the whole
 assistant — tools, memory, confirmations and all — rather than a cut-down copy.
 
-Security: this listens on the local network, so every request must carry the PIN. It is never
-opened to the internet.
+Security: this listens on the local network, so every request must carry the PIN. It is not opened
+to the internet directly — reaching it from outside the house goes through Tailscale, a private
+VPN mesh, never a forwarded router port. A 6-digit PIN is only safe because of that: on its own it
+is 1,000,000 combinations with no lockout, guessable by a script in minutes. `_authorised` now locks
+out a source after repeated wrong PINs, which is what makes it acceptable to reach from anywhere at
+all rather than only from inside the house.
 
 It is served over HTTPS because browsers only allow microphone access on a secure origin — over
 plain HTTP the phone simply refuses to record. The certificate is generated here and signed by
@@ -36,6 +40,15 @@ from ui.theme import STATE_BODY, STATE_COLORS, STATE_LABELS
 log = logging.getLogger("jarvis.remote")
 
 DEFAULT_PORT = 8770
+
+# A 6-digit PIN alone is 1,000,000 combinations and no obstacle to a script, once this is reachable
+# from anywhere rather than only from inside the house. These numbers turn "guessable in minutes"
+# into "guessable in years": five wrong guesses from one source locks it out for fifteen minutes,
+# and only guesses within the last fifteen minutes count towards the five - a source that fails
+# twice today and twice next week never gets close.
+MAX_PIN_ATTEMPTS = 5
+LOCKOUT_SECONDS = 15 * 60
+ATTEMPT_WINDOW_SECONDS = 15 * 60
 
 # What Whisper says when it is given near-silence. It is a generative model, so handed a second of
 # room tone it does not return nothing - it returns the most likely thing a clip of that length
@@ -66,6 +79,8 @@ def is_hallucination(text: str) -> bool:
     if not words:
         return True  # punctuation, music notes or brackets only
     return " ".join(words) in HALLUCINATIONS
+
+
 PIN_NOTE = "remote_pin"
 
 
@@ -207,6 +222,8 @@ class RemoteControl:
         self._icons: dict[int, bytes] = {}
         self._audio: tuple[int, bytes] | None = None
         self._spoke_at = 0.0  # when JAS last answered, so a follow-up needs no name
+        self._pin_failures: dict[str, list[float]] = {}   # source -> timestamps of wrong PINs
+        self._locked_out: dict[str, float] = {}           # source -> when its lockout ends
         core.bus.subscribe(AssistantReply, self._on_reply)
         core.bus.subscribe(TranscriptReady, self._on_heard)
         core.bus.subscribe(StateChanged, lambda e: None)
@@ -232,7 +249,41 @@ class RemoteControl:
     # --- the three things the phone asks for ---------------------------------
 
     def _authorised(self, request) -> bool:
-        return secrets.compare_digest(str(request.query.get("pin", "")), self._pin)
+        return self._check_pin(request)[0]
+
+    def _check_pin(self, request) -> tuple[bool, str]:
+        """Whether this request may proceed, and what to say if it may not.
+
+        A source that is currently locked out never has its PIN compared at all - the lockout
+        itself is the answer, and skipping the comparison keeps the rule simple to reason about.
+        """
+        source = request.remote or "unknown"
+        now = time.monotonic()
+
+        until = self._locked_out.get(source)
+        if until is not None:
+            if now < until:
+                minutes = max(1, int((until - now) // 60) + 1)
+                return False, f"Too many wrong PINs. Try again in about {minutes} minute(s)."
+            # The lockout has served its time; this source gets a clean slate, not a shorter fuse.
+            del self._locked_out[source]
+            self._pin_failures.pop(source, None)
+
+        if secrets.compare_digest(str(request.query.get("pin", "")), self._pin):
+            self._pin_failures.pop(source, None)
+            return True, ""
+
+        attempts = self._pin_failures.setdefault(source, [])
+        attempts.append(now)
+        cutoff = now - ATTEMPT_WINDOW_SECONDS
+        attempts[:] = [t for t in attempts if t > cutoff]
+        if len(attempts) >= MAX_PIN_ATTEMPTS:
+            self._locked_out[source] = now + LOCKOUT_SECONDS
+            self._pin_failures.pop(source, None)
+            log.warning("Locking out %s for %d minutes after %d wrong PINs",
+                        source, LOCKOUT_SECONDS // 60, MAX_PIN_ATTEMPTS)
+            return False, f"Too many wrong PINs. Try again in about {LOCKOUT_SECONDS // 60} minute(s)."
+        return False, "wrong pin"
 
     async def _page(self, request):
         return web.Response(text=phone_page(self._name), content_type="text/html")
@@ -275,8 +326,9 @@ class RemoteControl:
                             headers={"Cache-Control": "max-age=86400"})
 
     async def _state(self, request):
-        if not self._authorised(request):
-            return web.json_response({"error": "wrong pin"}, status=403)
+        ok, message = self._check_pin(request)
+        if not ok:
+            return web.json_response({"error": message}, status=429 if "Too many" in message else 403)
         state = self._core.state.current
         return web.json_response({
             "state": state.value,
@@ -292,8 +344,9 @@ class RemoteControl:
 
     async def _voice(self, request):
         """The latest reply as a WAV, so the phone speaks it rather than the laptop."""
-        if not self._authorised(request):
-            return web.Response(status=403)
+        ok, message = self._check_pin(request)
+        if not ok:
+            return web.Response(status=429 if "Too many" in message else 403)
         if self._render is None or not self._said:
             return web.Response(status=404)
         wanted = self._reply_id
@@ -308,8 +361,9 @@ class RemoteControl:
 
     async def _listen(self, request):
         """Speech recorded on the phone, transcribed here. The audio never leaves this laptop."""
-        if not self._authorised(request):
-            return web.json_response({"error": "wrong pin"}, status=403)
+        ok, message = self._check_pin(request)
+        if not ok:
+            return web.json_response({"error": message}, status=429 if "Too many" in message else 403)
         if self._transcribe is None:
             return web.json_response({"error": "speech recognition isn't ready yet"}, status=503)
         wav = await request.read()
@@ -343,8 +397,9 @@ class RemoteControl:
                                   "error": "" if accepted else "JAS is busy — try again in a moment"})
 
     async def _ask(self, request):
-        if not self._authorised(request):
-            return web.json_response({"error": "wrong pin"}, status=403)
+        ok, message = self._check_pin(request)
+        if not ok:
+            return web.json_response({"error": message}, status=429 if "Too many" in message else 403)
         body = await request.json()
         text = str(body.get("text", "")).strip()
         if not text:

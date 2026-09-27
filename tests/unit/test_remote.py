@@ -16,11 +16,12 @@ from app.remote import PIN_NOTE, RemoteControl, local_address, pin_for
 
 
 class Request:
-    """Just the two things the handlers touch: the query string and the JSON body."""
+    """Just the things the handlers touch: the query string, the JSON body and the source."""
 
-    def __init__(self, pin="123456", body=None):
+    def __init__(self, pin="123456", body=None, remote="203.0.113.5"):
         self.query = {"pin": pin}
         self._body = body or {}
+        self.remote = remote  # the source address, so lockout can be tested per-source
 
     async def json(self):
         return self._body
@@ -38,6 +39,86 @@ def remote():
     core = Jarvis()
     core.start()
     return core, RemoteControl(core, "123456", port=0, assistant_name="JAS")
+
+
+def test_five_wrong_pins_lock_out_that_source(remote):
+    """A 6-digit PIN alone is 1,000,000 combinations - guessable by a script in minutes once this
+    is reachable from anywhere. The lockout is what makes that acceptable."""
+    _, control = remote
+    for _ in range(4):
+        status, out = call(control._state, Request(pin="000000"))
+        assert status == 403 and out["error"] == "wrong pin"
+
+    # The fifth wrong guess is the one that trips the lockout, and is itself refused by it.
+    status, out = call(control._state, Request(pin="000000"))
+    assert status == 429
+    assert "Too many wrong PINs" in out["error"]
+
+
+def test_a_locked_out_source_is_refused_even_with_the_right_pin(remote):
+    """Once locked out, the PIN is not even compared - the lockout is the whole answer."""
+    _, control = remote
+    for _ in range(5):
+        call(control._state, Request(pin="000000"))
+
+    status, out = call(control._state, Request(pin="123456"))
+    assert status == 429 and "Too many wrong PINs" in out["error"]
+
+
+def test_lockout_is_per_source_not_global(remote):
+    """One attacker locking themselves out must not lock out the phone's own PIN."""
+    _, control = remote
+    for _ in range(5):
+        call(control._state, Request(pin="000000", remote="198.51.100.9"))
+
+    status, out = call(control._state, Request(pin="123456", remote="192.168.0.117"))
+    assert status == 200, "a different source, and the right PIN, must still work"
+
+
+def test_a_correct_pin_clears_previous_failures(remote):
+    """Four wrong guesses followed by the right one must not carry a grudge into the next mistake."""
+    _, control = remote
+    for _ in range(4):
+        call(control._state, Request(pin="000000"))
+    assert call(control._state, Request(pin="123456"))[0] == 200
+
+    # Four more wrong guesses now must not trip the five-attempt lockout the first four almost did.
+    for _ in range(4):
+        status, _ = call(control._state, Request(pin="000000"))
+        assert status == 403, "the slate was wiped by the successful attempt above"
+
+
+def test_the_lockout_expires(remote, monkeypatch):
+    """Fifteen minutes is a deterrent, not a life sentence for a mistyped PIN."""
+    import app.remote as remote_module
+
+    clock = [1000.0]
+    monkeypatch.setattr(remote_module.time, "monotonic", lambda: clock[0])
+
+    _, control = remote
+    for _ in range(5):
+        call(control._state, Request(pin="000000"))
+    assert call(control._state, Request(pin="123456"))[0] == 429, "still within the lockout"
+
+    clock[0] += remote_module.LOCKOUT_SECONDS + 1
+    status, _ = call(control._state, Request(pin="123456"))
+    assert status == 200, "the lockout has served its time"
+
+
+def test_old_failures_do_not_accumulate_towards_a_lockout(remote, monkeypatch):
+    """Two wrong guesses today and two next week are not four - the window resets what it counts."""
+    import app.remote as remote_module
+
+    clock = [1000.0]
+    monkeypatch.setattr(remote_module.time, "monotonic", lambda: clock[0])
+
+    _, control = remote
+    for _ in range(4):
+        call(control._state, Request(pin="000000"))
+
+    clock[0] += remote_module.ATTEMPT_WINDOW_SECONDS + 1
+    status, out = call(control._state, Request(pin="000000"))
+    assert status == 403 and out["error"] == "wrong pin", "the old attempts had already expired"
 
 
 def test_the_page_loads_without_a_pin(remote):
