@@ -7,12 +7,12 @@ def make(tmp_path):
 
 def test_facts_are_remembered_once_and_can_be_forgotten(tmp_path):
     memory = make(tmp_path)
-    assert memory.remember("Likki prefers meetings after 3 PM")
-    assert not memory.remember("Likki  prefers meetings after 3 PM")  # duplicate (whitespace-normalised)
-    memory.remember("Likki is building JARVIS and AI-Tester")
-    assert memory.facts() == ["Likki prefers meetings after 3 PM", "Likki is building JARVIS and AI-Tester"]
-    assert memory.forget("meetings") == ["Likki prefers meetings after 3 PM"]
-    assert memory.facts() == ["Likki is building JARVIS and AI-Tester"]
+    assert memory.remember("Alex prefers meetings after 3 PM")
+    assert not memory.remember("Alex  prefers meetings after 3 PM")  # duplicate (whitespace-normalised)
+    memory.remember("Alex is building JARVIS and AI-Tester")
+    assert memory.facts() == ["Alex prefers meetings after 3 PM", "Alex is building JARVIS and AI-Tester"]
+    assert memory.forget("meetings") == ["Alex prefers meetings after 3 PM"]
+    assert memory.facts() == ["Alex is building JARVIS and AI-Tester"]
 
 
 def test_memory_survives_restart(tmp_path):
@@ -32,21 +32,21 @@ def test_todos(tmp_path):
 
 def test_learned_words_and_search(tmp_path):
     memory = make(tmp_path)
-    memory.learn_word("Likki")
-    memory.learn_word("likki")  # same word, different case
-    assert memory.words() == ["Likki"]
-    memory.remember("Likki works at Vaibhav Vyapaar")
-    memory.log_exchange("what's the weather", "It's 25 degrees in Bengaluru.")
-    found = memory.search("weather in Bengaluru")
-    assert found["conversations"][0]["jarvis"] == "It's 25 degrees in Bengaluru."
-    assert memory.search("vaibhav")["facts"] == ["Likki works at Vaibhav Vyapaar"]
+    memory.learn_word("Alex")
+    memory.learn_word("alex")  # same word, different case
+    assert memory.words() == ["Alex"]
+    memory.remember("Alex works at Acme Ltd")
+    memory.log_exchange("what's the weather", "It's 25 degrees in London.")
+    found = memory.search("weather in London")
+    assert found["conversations"][0]["jarvis"] == "It's 25 degrees in London."
+    assert memory.search("acme")["facts"] == ["Alex works at Acme Ltd"]
 
 
 def test_context_for_the_prompt(tmp_path):
     memory = make(tmp_path)
     assert memory.context() == ""
-    memory.remember("Likki likes short answers")
+    memory.remember("Alex likes short answers")
     memory.add_todo("reply to Rahul")
-    memory.log_exchange("hi", "Hello Likki!")
+    memory.log_exchange("hi", "Hello Alex!")
     context = memory.context()
-    assert "Likki likes short answers" in context and "reply to Rahul" in context and "Hello Likki!" in context
+    assert "Alex likes short answers" in context and "reply to Rahul" in context and "Hello Alex!" in context

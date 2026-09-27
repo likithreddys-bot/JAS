@@ -15,7 +15,7 @@ Say it however you like — "lock my laptop", "lock the computer", "lock my scre
 
 ## TEST L.2 — Unlock
 1. Sign back in (password or fingerprint).
-2. Expect within about a second: **"Hey Likki, I'm ready."** — and then it listens for a moment in case you
+2. Expect within about a second: **"Hey Alex, I'm ready."** — and then it listens for a moment in case you
    want to say something.
 3. It must **not** give the morning briefing, the weather or the video.
 

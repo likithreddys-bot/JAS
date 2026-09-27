@@ -22,7 +22,7 @@ BACKDROP = (11, 14, 20)
 MOODS = {
     # sphere colour, eye openness, brow angle (degrees, inward-down is positive), message
     "watchful": ((255, 196, 107), 1.00, 0, ""),
-    "angry": ((232, 92, 84), 0.62, 20, "Don't touch Likki's PC"),
+    "angry": ((232, 92, 84), 0.62, 20, "Don't touch Alex's PC"),
 }
 
 
@@ -35,7 +35,7 @@ def _font(size: int):
     return ImageFont.load_default()
 
 
-def draw_face(mood: str, name: str = "Likith", assistant: str = "JAS",
+def draw_face(mood: str, name: str = "Alex", assistant: str = "JAS",
               with_text: bool = True) -> Image.Image:
     """JAS's sphere and its eyes. The wallpaper wants just the face; the lock screen wants words."""
     colour, openness, brow_tilt, warning = MOODS.get(mood, MOODS["watchful"])
@@ -96,7 +96,7 @@ def draw_face(mood: str, name: str = "Likith", assistant: str = "JAS",
     return image
 
 
-def set_wallpaper(mood: str, where: Path, name: str = "Likith", assistant: str = "JAS") -> bool:
+def set_wallpaper(mood: str, where: Path, name: str = "Alex", assistant: str = "JAS") -> bool:
     """Put JAS's face on the desktop. Just the circle — the desktop already has your icons on it."""
     import ctypes
 
@@ -110,7 +110,7 @@ def set_wallpaper(mood: str, where: Path, name: str = "Likith", assistant: str =
     return ok
 
 
-def set_lock_screen(mood: str, where: Path, name: str = "Likith", assistant: str = "JAS") -> bool:
+def set_lock_screen(mood: str, where: Path, name: str = "Alex", assistant: str = "JAS") -> bool:
     """Draw the face and make it the Windows lock screen. False if Windows refused."""
     where.mkdir(parents=True, exist_ok=True)  # `where` is the folder, not the file
     path = where / f"lock-{mood}.jpg"

@@ -63,8 +63,8 @@ class Settings(BaseSettings):
     # What JAS tells the user to say to wake it. The wake-word MODEL decides what actually works,
     # so this only changes the wording, never the detection.
     wake_phrase: str = "Jarvis"
-    user_name: str = "Likki"
-    home_city: str = "Bengaluru"
+    user_name: str = "Alex"
+    home_city: str = "London"
     # Start in rest mode (and rest again after the laptop wakes from sleep); "wake up Jarvis" gives the briefing.
     start_resting: bool = True
     # Played in your Chrome after the morning briefing (YouTube search; a different top result each day).

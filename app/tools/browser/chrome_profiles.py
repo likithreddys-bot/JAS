@@ -26,7 +26,7 @@ CHROME_CANDIDATES = [
 @dataclass(frozen=True)
 class Profile:
     directory: str  # e.g. "Profile 2"
-    name: str  # what Chrome shows, e.g. "Likith"
+    name: str  # what Chrome shows, e.g. "Alex"
     email: str
 
 
@@ -48,7 +48,7 @@ def list_profiles(user_data: Path = USER_DATA) -> tuple[list[Profile], str | Non
 def find_profile(spoken: str, profiles: list[Profile]) -> Profile | None:
     query = spoken.lower().strip()
     exact_name = next((p for p in profiles if p.name.lower() == query), None)
-    if exact_name:  # "Likith" must pick the profile named Likith, not likith@… of another profile
+    if exact_name:  # "Alex" must pick the profile named Alex, not alex@… of another profile
         return exact_name
     best, best_score = None, 0.0
     for profile in profiles:

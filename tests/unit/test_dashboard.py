@@ -11,8 +11,8 @@ from ui.dashboard import EDITABLE, DashboardBridge
 from ui.hotkey import parse_shortcut
 
 ENV = """# JARVIS settings
-USER_NAME=Likki
-HOME_CITY=Bengaluru
+USER_NAME=Alex
+HOME_CITY=London
 
 # --- voice ---
 TTS_SPEED=1.0
@@ -22,14 +22,15 @@ TTS_SPEED=1.0
 def test_env_values_are_updated_in_place_keeping_comments(tmp_path):
     env = tmp_path / ".env"
     env.write_text(ENV, encoding="utf-8")
-    changed = env_file.update_values(env, {"HOME_CITY": "Hyderabad", "TTS_SPEED": "1.0", "HOTKEY": "ctrl+alt+j"})
+    # TTS_SPEED is given the value it already has, so it must not be reported as changed.
+    changed = env_file.update_values(env, {"HOME_CITY": "Paris", "TTS_SPEED": "1.0", "HOTKEY": "ctrl+alt+j"})
     assert sorted(changed) == ["HOME_CITY", "HOTKEY"]  # unchanged values are left alone
     text = env.read_text(encoding="utf-8")
     assert "# JARVIS settings" in text and "# --- voice ---" in text
-    assert "HOME_CITY=Hyderabad" in text and "USER_NAME=Likki" in text
+    assert "HOME_CITY=Paris" in text and "USER_NAME=Alex" in text
     assert text.index("USER_NAME") < text.index("HOME_CITY") < text.index("TTS_SPEED")  # order kept
     assert "HOTKEY=ctrl+alt+j" in text  # new keys appended
-    assert env_file.read_values(env)["HOME_CITY"] == "Hyderabad"
+    assert env_file.read_values(env)["HOME_CITY"] == "Paris"
 
 
 def test_activity_log_records_the_conversation():
@@ -73,7 +74,7 @@ def dashboard(tmp_path, monkeypatch):
 
 def test_status_summarises_jarvis(dashboard):
     bridge, core, memory = dashboard
-    memory.remember("Likki likes short answers")
+    memory.remember("Alex likes short answers")
     memory.add_todo("finish the BERT model")
     bridge.refresh()
     status = bridge.status
@@ -87,14 +88,14 @@ def test_settings_tab_lists_current_values_and_saves(dashboard):
     bridge, _, _ = dashboard
     values = {row["key"]: row["value"] for row in bridge.settingsList}
     assert set(values) == {key for key, _, _ in EDITABLE}
-    assert values["HOME_CITY"] == "Bengaluru" and values["HOTKEY"] == "ctrl+space"  # falls back to the default
+    assert values["HOME_CITY"] == "London" and values["HOTKEY"] == "ctrl+space"  # falls back to the default
 
     messages = []
     bridge.savedMessage.connect(messages.append)
-    bridge.save({"HOME_CITY": "Hyderabad", "HOTKEY": "ctrl+alt+j"})
+    bridge.save({"HOME_CITY": "Paris", "HOTKEY": "ctrl+alt+j"})
     assert "Saved 2 settings" in messages[-1] and "Restart JARVIS to apply" in messages[-1]
-    assert {r["key"]: r["value"] for r in bridge.settingsList}["HOME_CITY"] == "Hyderabad"
-    bridge.save({"HOME_CITY": "Hyderabad"})
+    assert {r["key"]: r["value"] for r in bridge.settingsList}["HOME_CITY"] == "Paris"
+    bridge.save({"HOME_CITY": "Paris"})  # saving the same value again changes nothing
     assert messages[-1] == "Nothing changed."
 
 

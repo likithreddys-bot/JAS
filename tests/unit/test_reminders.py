@@ -35,7 +35,7 @@ def memory(tmp_path):
 
 
 def test_reminder_tools(memory):
-    tools = {t.name: t for t in memory_tools(memory, "Bengaluru", now=lambda: NOW)}
+    tools = {t.name: t for t in memory_tools(memory, "London", now=lambda: NOW)}
     made = tools["create_reminder"].run(text="call Rahul", at="18:00")
     assert made.ok and made.data["when"] == "Tuesday 22 September, 06:00 PM"
     assert [r["text"] for r in tools["list_reminders"].run().data["reminders"]] == ["call Rahul"]
@@ -67,7 +67,7 @@ def service(memory, clock, core=None):
     if core.state.current is S.STARTING:
         core.start()
     shown = []
-    return core, shown, ReminderService(core, memory, "Likki", lambda title, text: shown.append((title, text)) or True, clock)
+    return core, shown, ReminderService(core, memory, "Alex", lambda title, text: shown.append((title, text)) or True, clock)
 
 
 def test_reminder_is_notified_and_spoken_on_time(memory):
@@ -79,7 +79,7 @@ def test_reminder_is_notified_and_spoken_on_time(memory):
     clock.now = NOW + timedelta(minutes=10, seconds=3)
     reminders.tick()
     assert shown == [("\U0001f514 Reminder", "call Rahul")]
-    assert core.state.current is S.WAKE_DETECTED and core.announcement == "Likki, reminder: call Rahul."
+    assert core.state.current is S.WAKE_DETECTED and core.announcement == "Alex, reminder: call Rahul."
     reminders.tick()
     assert len(shown) == 1  # delivered once
 
@@ -103,7 +103,7 @@ def test_spoken_reminder_waits_until_jarvis_is_free(memory):
     assert len(shown) == 1 and core.announcement is None  # notification now, voice later
     core.state.transition(S.STANDBY)
     reminders.tick()
-    assert core.announcement == "Likki, reminder: call Rahul."
+    assert core.announcement == "Alex, reminder: call Rahul."
 
 
 def test_briefing_mentions_todays_reminders(memory, monkeypatch):
@@ -112,5 +112,5 @@ def test_briefing_mentions_todays_reminders(memory, monkeypatch):
 
     monkeypatch.setattr(weather, "today", lambda city: (_ for _ in ()).throw(OSError()))
     memory.add_reminder("call Rahul", datetime(2026, 9, 22, 18, 0))
-    text = briefing.build_briefing("Likki", "Bengaluru", memory, lambda: [], now=lambda: NOW)
+    text = briefing.build_briefing("Alex", "London", memory, lambda: [], now=lambda: NOW)
     assert "You have 1 reminder today: call Rahul at 6:00 PM." in text

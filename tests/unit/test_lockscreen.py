@@ -13,7 +13,7 @@ class FakeScreen:
         return self.locked
 
 
-def watcher(core, screen, greeting="Hey Likki, I'm ready."):
+def watcher(core, screen, greeting="Hey Alex, I'm ready."):
     w = LockWatcher.__new__(LockWatcher)  # no polling thread in tests
     w._core, w._is_locked, w._greeting, w._poll = core, screen, greeting, 0.01
     w._bad_passwords = lambda: None  # Windows not asked about passwords in these tests
@@ -48,7 +48,7 @@ def test_unlocking_wakes_jarvis_and_greets_without_a_briefing():
 
     screen.locked = False
     watch.check()
-    assert core.announcement == "Hey Likki, I'm ready."
+    assert core.announcement == "Hey Alex, I'm ready."
     assert core.state.current is S.WAKE_DETECTED  # speaks the greeting, no morning briefing
 
 
@@ -79,7 +79,7 @@ def test_lock_my_pc_is_an_instant_command_that_says_nothing():
 def watcher_with_passwords(core, screen, counts, faces):
     """A watcher whose password counter and lock-screen face are both fakes."""
     w = LockWatcher.__new__(LockWatcher)
-    w._core, w._is_locked, w._greeting, w._poll = core, screen, "Hey Likith, I'm ready.", 0.01
+    w._core, w._is_locked, w._greeting, w._poll = core, screen, "Hey Alex, I'm ready.", 0.01
     w._bad_passwords = lambda: counts[0]
     w._set_face = lambda mood: faces.append(mood) or True
     w._locked = screen()
@@ -131,7 +131,7 @@ def test_a_clean_unlock_is_just_a_greeting():
 
     screen.locked = False
     watch.check()
-    assert core.announcement == "Hey Likith, I'm ready."
+    assert core.announcement == "Hey Alex, I'm ready."
 
 
 def test_the_lock_faces_are_drawn_and_look_different():
@@ -146,8 +146,8 @@ def test_the_wallpaper_face_has_no_words_but_the_lock_screen_does():
     """The desktop already has your icons on it; the lock screen needs to say whose PC this is."""
     from app.lockart import draw_face
 
-    lock = draw_face("angry", "Likith", "JAS", with_text=True)
-    paper = draw_face("angry", "Likith", "JAS", with_text=False)
+    lock = draw_face("angry", "Alex", "JAS", with_text=True)
+    paper = draw_face("angry", "Alex", "JAS", with_text=False)
     assert lock.size == paper.size == (1920, 1080)
     assert lock.tobytes() != paper.tobytes(), "the lock screen version carries the warning text"
 
@@ -158,7 +158,7 @@ def test_the_wallpaper_is_written_even_if_windows_refuses_it(tmp_path, monkeypat
     from app import lockart
 
     monkeypatch.setattr(ctypes.windll.user32, "SystemParametersInfoW", lambda *a: 0)
-    assert lockart.set_wallpaper("watchful", tmp_path, "Likith", "JAS") is False
+    assert lockart.set_wallpaper("watchful", tmp_path, "Alex", "JAS") is False
     assert (tmp_path / "wallpaper-watchful.jpg").exists(), "the picture is still drawn"
 
 

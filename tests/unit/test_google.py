@@ -63,7 +63,7 @@ class FakeGmail:
 
     def get(self, **kwargs):
         if kwargs.get("format") == "full":
-            body = base64.urlsafe_b64encode(b"Hi Likki,\n\nCan we move the meeting?\n").decode()
+            body = base64.urlsafe_b64encode(b"Hi Alex,\n\nCan we move the meeting?\n").decode()
             return _Returns({"id": "m1", "threadId": "t1", "payload": {
                 "headers": [{"name": "From", "value": "Rahul <rahul@example.com>"},
                             {"name": "Subject", "value": "Meeting"}, {"name": "Message-ID", "value": "<abc@mail>"}],
@@ -162,8 +162,8 @@ def test_tools_explain_when_google_is_not_connected():
 def test_plain_text_is_extracted_from_html_only_mail():
     payload = {"mimeType": "multipart/alternative", "parts": [
         {"mimeType": "text/html", "body": {"data": base64.urlsafe_b64encode(
-            b"<html><style>p{}</style><p>Hello <b>Likki</b></p></html>").decode()}}]}
-    assert gmail._plain_text(payload) == "Hello Likki"
+            b"<html><style>p{}</style><p>Hello <b>Alex</b></p></html>").decode()}}]}
+    assert gmail._plain_text(payload) == "Hello Alex"
 
 
 def test_briefing_reads_meetings_when_connected(tmp_path, monkeypatch):
@@ -172,7 +172,7 @@ def test_briefing_reads_meetings_when_connected(tmp_path, monkeypatch):
     from app.tools import weather
 
     monkeypatch.setattr(weather, "today", lambda city: (_ for _ in ()).throw(OSError()))
-    text = briefing.build_briefing("Likki", "Bengaluru", MemoryStore(tmp_path / "m.db"), lambda: [],
+    text = briefing.build_briefing("Alex", "London", MemoryStore(tmp_path / "m.db"), lambda: [],
                                    meetings=lambda: ["Standup at 10:00", "Design review at 15:30"], now=lambda: NOW)
     assert "You have 2 meetings today: Standup at 10:00 and Design review at 15:30." in text
     assert "can't see your meetings" not in text

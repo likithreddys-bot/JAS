@@ -9,11 +9,11 @@ from app.tools.browser import browser_tools, chrome_profiles, music
 @pytest.fixture
 def user_data(tmp_path):
     state = {"profile": {"last_used": "Profile 2", "info_cache": {
-        "Profile 2": {"name": "likithreddy", "user_name": "likith@example.com"},
+        "Profile 2": {"name": "alexsmith", "user_name": "alex@example.com"},
         "Profile 3": {"name": "example-work.com", "user_name": "work@example-work.com"},
-        "Profile 4": {"name": "Likith", "user_name": ""},
-        "Profile 5": {"name": "TheBatMan", "user_name": ""},
-        "Profile 6": {"name": "Jaya", "user_name": ""},
+        "Profile 4": {"name": "Alex", "user_name": ""},
+        "Profile 5": {"name": "TheFalcon", "user_name": ""},
+        "Profile 6": {"name": "Sam", "user_name": ""},
     }}}
     (tmp_path / "Local State").write_text(json.dumps(state), encoding="utf-8")
     return tmp_path
@@ -21,15 +21,15 @@ def user_data(tmp_path):
 
 def test_profiles_are_listed_with_last_used(user_data):
     profiles, last_used = chrome_profiles.list_profiles(user_data)
-    assert [p.name for p in profiles] == ["likithreddy", "example-work.com", "Likith", "TheBatMan", "Jaya"]
+    assert [p.name for p in profiles] == ["alexsmith", "example-work.com", "Alex", "TheFalcon", "Sam"]
     assert last_used == "Profile 2"
 
 
 @pytest.mark.parametrize("spoken, directory", [
-    ("Likith", "Profile 4"),  # exact name beats the similar "likithreddy"
-    ("likithreddy", "Profile 2"),
-    ("batman", "Profile 5"),
-    ("jaya", "Profile 6"),
+    ("Alex", "Profile 4"),  # exact name beats the similar "alexsmith"
+    ("alexsmith", "Profile 2"),
+    ("falcon", "Profile 5"),
+    ("sam", "Profile 6"),
     ("work", "Profile 3"),  # part of a profile named after a domain is enough
     ("work@example-work.com", "Profile 3"),
 ])
@@ -55,11 +55,11 @@ def test_urls_get_a_scheme(url, expected):
 def test_default_profile_setting_is_used(user_data, monkeypatch):
     monkeypatch.setattr(chrome_profiles, "USER_DATA", user_data)
     monkeypatch.setattr(chrome_profiles, "list_profiles", lambda user_data=user_data: _real_list(user_data))
-    assert chrome_profiles.pick("", "")[0].name == "likithreddy"  # last used
-    assert chrome_profiles.pick("", "Jaya")[0].name == "Jaya"  # configured default
-    assert chrome_profiles.pick("batman", "Jaya")[0].name == "TheBatMan"  # named in the request wins
+    assert chrome_profiles.pick("", "")[0].name == "alexsmith"  # last used
+    assert chrome_profiles.pick("", "Sam")[0].name == "Sam"  # configured default
+    assert chrome_profiles.pick("falcon", "Sam")[0].name == "TheFalcon"  # named in the request wins
     profile, error = chrome_profiles.pick("superman", "")
-    assert profile is None and "TheBatMan" in error
+    assert profile is None and "TheFalcon" in error
 
 
 _real_list = chrome_profiles.list_profiles
@@ -90,15 +90,15 @@ def fake_play(monkeypatch, user_data):
     monkeypatch.setattr(music, "find_song", lambda q: music.Track("Sahiba", "Aditya Rikhari", "https://music.youtube.com/watch?v=x"))
     playing = {"state": media.NowPlaying("Chrome", "Sahiba", "Aditya Rikhari", True)}
     monkeypatch.setattr(media, "wait_until_playing", lambda title: playing["state"])
-    tools = {t.name: t for t in browser_tools(session=None, default_profile="Likith")}
+    tools = {t.name: t for t in browser_tools(session=None, default_profile="Alex")}
     return tools["play_music"], opened, playing
 
 
 def test_music_plays_in_the_users_default_profile(fake_play):
     play, opened, _ = fake_play
     result = play.run(query="Sahiba")
-    assert result.ok and result.data["title"] == "Sahiba" and result.data["profile"] == "Likith"
-    assert opened == [("Likith", "https://music.youtube.com/watch?v=x")]
+    assert result.ok and result.data["title"] == "Sahiba" and result.data["profile"] == "Alex"
+    assert opened == [("Alex", "https://music.youtube.com/watch?v=x")]
 
 
 def test_music_reports_ads_and_failures_honestly(fake_play):

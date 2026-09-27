@@ -398,8 +398,8 @@ def test_go_offline_then_wake_up_gives_briefing_takes_todos_and_starts_the_day()
 
     pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=respond,
                              quick=lambda text: quick.run(text, run_tool), max_listen_seconds=3, follow_up_seconds=0.6,
-                             briefing=lambda: ("Hey, hi Likki! What's on your to-do list for today?", True),
-                             after_briefing=lambda: "Enjoy your day, Likki.")
+                             briefing=lambda: ("Hey, hi Alex! What's on your to-do list for today?", True),
+                             after_briefing=lambda: "Enjoy your day, Alex.")
     core.start()
     core.state.transition(S.WAKE_DETECTED)
     assert wait_for(lambda: core.state.current is S.LISTENING)
@@ -408,12 +408,12 @@ def test_go_offline_then_wake_up_gives_briefing_takes_todos_and_starts_the_day()
     assert speaker.said[-1].startswith("Going offline")
 
     core.bus.publish(WakeWordDetected(0.9))  # "wake up, Jarvis"
-    assert wait_for(lambda: speaker.said[-1] == "Hey, hi Likki! What's on your to-do list for today?")
+    assert wait_for(lambda: speaker.said[-1] == "Hey, hi Alex! What's on your to-do list for today?")
     assert wait_for(lambda: core.state.current is S.LISTENING)
     speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)  # the to-do list
     assert wait_for(lambda: core.state.current is S.STANDBY)
     assert "finish the BERT model and call Rahul" in prompts[0] and "add_todo" in prompts[0]
-    assert speaker.said[-2:] == ["Added both to your list.", "Enjoy your day, Likki."]
+    assert speaker.said[-2:] == ["Added both to your list.", "Enjoy your day, Alex."]
 
 
 def test_break_reminder_is_spoken_and_the_answer_handled():
@@ -422,9 +422,9 @@ def test_break_reminder_is_spoken_and_the_answer_handled():
     pipeline = VoicePipeline(core, speaker, stt, make_recorder(), respond=lambda t: iter(["Great, let's keep going."]),
                              max_listen_seconds=3, follow_up_seconds=0.6)
     core.start()
-    assert core.announce("Likki, your screen time is high. Take a break, or shall we continue?")
+    assert core.announce("Alex, your screen time is high. Take a break, or shall we continue?")
     assert wait_for(lambda: core.state.current is S.LISTENING)
-    assert speaker.said == ["Likki, your screen time is high. Take a break, or shall we continue?"]  # no "Yes?"
+    assert speaker.said == ["Alex, your screen time is high. Take a break, or shall we continue?"]  # no "Yes?"
     speak_into(pipeline, [SPEECH] * 3 + [SILENCE] * 10)
     assert wait_for(lambda: speaker.said[-1] == "Great, let's keep going.")
 
@@ -434,8 +434,8 @@ def test_real_transcriber_builds_and_updates_its_vocabulary(tmp_path):
 
     stt = Transcriber("small", tmp_path, "en")  # no model is loaded until first use
     assert stt._hint is None
-    stt.set_vocabulary("Jarvis, Likki")
-    assert stt._hint == "Jarvis, Likki."
+    stt.set_vocabulary("Jarvis, Alex")
+    assert stt._hint == "Jarvis, Alex."
 
 
 @pytest.mark.parametrize("text, unfinished", [
@@ -513,14 +513,14 @@ def test_waking_from_rest_a_second_time_greets_instead_of_briefing_again():
     pipeline = VoicePipeline(core, speaker, stt, make_recorder(),
                              respond=lambda prompt: iter(["It's half past four."]),
                              quick=lambda text: None, max_listen_seconds=3, follow_up_seconds=0.6,
-                             briefing=lambda: ("Welcome back, Likki.", False),
+                             briefing=lambda: ("Welcome back, Alex.", False),
                              after_briefing=lambda: started_the_day.append(True) or "Enjoy your day.")
     core.start()
     core.rest()
     assert wait_for(lambda: core.state.current is S.RESTING)
 
     core.bus.publish(WakeWordDetected(0.9))
-    assert wait_for(lambda: speaker.said[-1:] == ["Welcome back, Likki."])
+    assert wait_for(lambda: speaker.said[-1:] == ["Welcome back, Alex."])
     # It listens for a command instead of asking for a to-do list, and plays no morning video.
     assert wait_for(lambda: core.state.current is S.LISTENING)
     assert started_the_day == []

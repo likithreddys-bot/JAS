@@ -1,8 +1,9 @@
 # Builds the JAS Android app and, if a phone is plugged in with USB debugging on, installs it.
 #
 # The toolchain lives in C:\jas-tools deliberately: the Android SDK's own .bat scripts do not quote
-# JAVA_HOME, so a space anywhere in the path ("jaya lakshmi") makes sdkmanager and friends fail with
-# "'C:\Users\jaya' is not recognized". None of that is in git - it is 1.3 GB of machine-specific tools.
+# JAVA_HOME, so a space anywhere in the path makes sdkmanager and friends fail. A home directory
+# like C:\Users\jane doe gets you "'C:\Users\jane' is not recognized", and nothing else explains it.
+# None of this is in git - it is 1.3 GB of machine-specific tools.
 
 $ErrorActionPreference = 'Stop'
 

@@ -77,10 +77,10 @@ def test_vscode_project_folders_from_state(tmp_path):
 
     state = tmp_path / "storage.json"
     state.write_text(json.dumps({"windowsState": {
-        "lastActiveWindow": {"folder": "file:///c%3A/Users/jaya%20lakshmi/digitap_replica"},
-        "openedWindows": [{"folder": "file:///c%3A/Users/jaya%20lakshmi/AI-Tester"}]}}), encoding="utf-8")
+        "lastActiveWindow": {"folder": "file:///c%3A/Users/sam/digitap_replica"},
+        "openedWindows": [{"folder": "file:///c%3A/Users/sam/AI-Tester"}]}}), encoding="utf-8")
     folders = vscode_folders(state)
-    assert str(folders["AI-Tester"]).replace("/", "\\") == r"c:\Users\jaya lakshmi\AI-Tester"
+    assert str(folders["AI-Tester"]).replace("/", "\\") == r"c:\Users\sam\AI-Tester"
     assert "digitap_replica" in folders
 
 

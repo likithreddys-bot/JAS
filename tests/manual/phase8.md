@@ -2,7 +2,7 @@
 
 | ID | Say | Expected | Result |
 |---|---|---|---|
-| TEST 080 | "Remind me in 2 minutes to drink water" | "I've set a reminder…"; after 2 min: 🔔 notification **and** JARVIS says "Likki, reminder: drink water" | |
+| TEST 080 | "Remind me in 2 minutes to drink water" | "I've set a reminder…"; after 2 min: 🔔 notification **and** JARVIS says "Alex, reminder: drink water" | |
 | TEST 081 | "Remind me at 9 PM to call Rahul" | Confirms the exact time (tonight, not tomorrow) | |
 | TEST 082 | "Remind me every weekday at 10 AM about the standup" | Confirms it repeats on weekdays | |
 | TEST 083 | "What reminders do I have?" | Lists them with times | |
