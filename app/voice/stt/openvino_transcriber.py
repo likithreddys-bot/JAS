@@ -26,7 +26,10 @@ import numpy as np
 
 log = logging.getLogger("jarvis.voice.stt")
 
-IDLE_UNLOAD_SECONDS = 300
+# Longer than the CPU backend's (300 s): reloading here means recompiling for the GPU, measured at
+# 8-13 s, against faster-whisper's roughly instant reload from a cached CPU model. The RAM this
+# holds idle is a smaller cost than making every "hey jas" after a quiet spell wait that long again.
+IDLE_UNLOAD_SECONDS = 1800
 
 
 class OpenVinoTranscriber:
@@ -100,7 +103,13 @@ class OpenVinoTranscriber:
             )
         started = time.perf_counter()
         try:
-            self._pipeline = ovg.WhisperPipeline(str(self._model_dir), device=self._device)
+            # CACHE_DIR persists the compiled kernels to disk. Measured across two loads in the same
+            # process it made no clear difference (~8-10s either way) - GPU compilation seems to be
+            # dominated by something the cache doesn't cover here - but it is OpenVINO's own
+            # recommended setting for repeated loads and costs nothing to leave on.
+            self._pipeline = ovg.WhisperPipeline(
+                str(self._model_dir), device=self._device, CACHE_DIR=str(self._model_dir / ".cache"),
+            )
         except Exception as exc:
             raise RuntimeError(f"Could not load the OpenVINO Whisper model on {self._device}") from exc
         log.info("OpenVINO Whisper loaded on %s in %.1f s", self._device, time.perf_counter() - started)
