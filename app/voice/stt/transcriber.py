@@ -25,7 +25,20 @@ class Transcriber:
         self._model = None
         self._lock = threading.Lock()
         self._unload_timer: threading.Timer | None = None
+        self._pending = 0            # callers currently waiting for, or holding, the lock
+        self._pending_lock = threading.Lock()  # protects the counter only; always uncontended
         self.set_vocabulary(vocabulary)
+
+    @property
+    def backlog(self) -> int:
+        """How many callers are queued behind the lock right now, including whoever holds it.
+
+        There is one model, on CPU, shared by the wake-word pipeline, barge-in and every phone —
+        and transcription takes real seconds. Nothing upstream should keep piling more audio onto
+        a queue this is already behind on; they should check this first and back off instead.
+        """
+        with self._pending_lock:
+            return self._pending
 
     def set_vocabulary(self, vocabulary: str) -> None:
         # Whisper uses this as preceding context, which biases it towards these spellings.
@@ -36,24 +49,30 @@ class Transcriber:
             self._load_locked()
 
     def transcribe(self, audio: np.ndarray) -> str:
-        with self._lock:
-            self._load_locked()
-            started = time.perf_counter()
-            segments, _ = self._model.transcribe(
-                audio.astype(np.float32) / 32768.0,
-                language=self._language,
-                beam_size=1,
-                condition_on_previous_text=False,
-                initial_prompt=self._hint,
-            )
-            text = " ".join(s.text.strip() for s in segments).strip()
-            log.info(
-                "Transcribed %.1f s of audio in %.2f s",
-                len(audio) / 16000,
-                time.perf_counter() - started,
-            )
-            self._schedule_unload()
-            return text
+        with self._pending_lock:
+            self._pending += 1
+        try:
+            with self._lock:
+                self._load_locked()
+                started = time.perf_counter()
+                segments, _ = self._model.transcribe(
+                    audio.astype(np.float32) / 32768.0,
+                    language=self._language,
+                    beam_size=1,
+                    condition_on_previous_text=False,
+                    initial_prompt=self._hint,
+                )
+                text = " ".join(s.text.strip() for s in segments).strip()
+                log.info(
+                    "Transcribed %.1f s of audio in %.2f s",
+                    len(audio) / 16000,
+                    time.perf_counter() - started,
+                )
+                self._schedule_unload()
+                return text
+        finally:
+            with self._pending_lock:
+                self._pending -= 1
 
     def _load_locked(self) -> None:
         if self._model is not None:

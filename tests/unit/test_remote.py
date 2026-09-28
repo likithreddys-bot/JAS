@@ -370,6 +370,44 @@ def _hearing(words):
                                transcribe=lambda wav: words)
 
 
+def test_a_deep_queue_is_refused_rather_than_joined(remote):
+    """One Whisper model, on CPU, shared by everything that can hear.
+
+    A real conversation nearby once queued this laptop 75 seconds deep - each clip answered a
+    minute late, to a question nobody was still asking. Refusing a clip outright, immediately, is
+    more honest than accepting it and making the user wait for an answer that arrives too late to
+    matter, and it stops the queue from growing without bound in the first place.
+    """
+    core = Jarvis()
+    core.start()
+    control = RemoteControl(core, "123456", port=0, assistant_name="JAS",
+                            transcribe=lambda wav: "hey jas, lock my pc",
+                            backlog=lambda: 2)
+    status, out = call(control._listen, VoiceRequest())
+    assert status == 200
+    assert out["heard"] == "" and "catching up" in out["error"]
+
+
+def test_a_shallow_queue_is_still_served(remote):
+    """One already running and one waiting is normal, not a reason to refuse."""
+    core = Jarvis()
+    core.start()
+    control = RemoteControl(core, "123456", port=0, assistant_name="JAS",
+                            transcribe=lambda wav: "hey jas, lock my pc",
+                            backlog=lambda: 1)
+    status, out = call(control._listen, VoiceRequest())
+    assert status == 200 and out["heard"] == "lock my pc"
+
+
+def test_no_backlog_given_defaults_to_never_refusing(remote):
+    """The `remote` fixture builds RemoteControl with no backlog= at all, like every caller before
+    this existed - it must default to "nothing queued", not to refusing every request."""
+    _, control = remote
+    control._transcribe = lambda wav: "hey jas, lock my pc"
+    status, out = call(control._listen, VoiceRequest())
+    assert status == 200 and out["heard"] == "lock my pc"
+
+
 def test_a_new_ip_does_not_change_who_the_laptop_is(tmp_path):
     """The router reassigns the laptop's address, and the certificate names the address.
 

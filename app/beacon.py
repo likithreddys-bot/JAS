@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import socket
 import threading
+from typing import Callable
 
 log = logging.getLogger("jarvis.beacon")
 
@@ -27,12 +28,16 @@ MAX_DATAGRAM = 64  # a question this short needs no more; anything larger is not
 class Beacon:
     """Answers "where is JAS?" on the local network, and nothing else."""
 
-    def __init__(self, port: int, host: str, discovery_port: int = DISCOVERY_PORT) -> None:
+    def __init__(self, port: int, discovery_port: int = DISCOVERY_PORT,
+                 host_lookup: Callable[[], str] | None = None) -> None:
         self._port = port          # the port the phone should actually talk to
-        self._host = host          # this laptop's address on the network
         self._discovery = discovery_port
         self._socket: socket.socket | None = None
         self._thread = threading.Thread(target=self._serve, name="beacon", daemon=True)
+        if host_lookup is None:
+            from app.remote import local_host
+            host_lookup = local_host
+        self._host_lookup = host_lookup
 
     def start(self) -> None:
         self._thread.start()
@@ -44,7 +49,10 @@ class Beacon:
 
     @property
     def answer(self) -> bytes:
-        return f"JAS {self._host} {self._port}".encode()
+        # Looked up fresh on every reply, never cached: this laptop's address changed three times
+        # in two days while JAS kept running, and a beacon that remembers where it *used* to be
+        # sends the phone to an address nothing answers on any more.
+        return f"JAS {self._host_lookup()} {self._port}".encode()
 
     def _serve(self) -> None:
         try:

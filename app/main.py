@@ -32,7 +32,7 @@ from app.tools.memory_tools import memory_tools
 from app.notifications import notify
 from app.reminders import ReminderService
 from app.beacon import Beacon
-from app.remote import RemoteControl, local_host, pin_for
+from app.remote import RemoteControl, pin_for
 from app.wellbeing import ActivityMonitor
 from app.tools.browser import browser_tools
 from app.tools.browser.session import BrowserSession
@@ -203,10 +203,11 @@ def start_voice(core: Jarvis, settings: Settings, services: list[WakeWordService
         remote = RemoteControl(core, pin_for(memory), settings.remote_port,
                                settings.assistant_name, render=speaker.render,
                                transcribe=lambda wav: transcriber.transcribe(_wav_to_audio(wav)),
+                               backlog=lambda: transcriber.backlog,
                                certificates=settings.data_dir / "certificates")
         remote.start()
         # So the phone finds this laptop after the router changes its address.
-        Beacon(settings.remote_port, local_host()).start()
+        Beacon(settings.remote_port).start()
         log.info("Phone remote: open %s and enter PIN %s", remote.address, pin_for(memory))
     AudioDucker(core.bus)
     LockWatcher(

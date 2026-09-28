@@ -245,6 +245,8 @@ class BubbleService : Service(), SensorEventListener {
 
     // --- listening -----------------------------------------------------------
 
+    @Volatile private var sending = false
+
     private fun listen() {
         ears = Ears(
             onLevel = { level -> scope.launch { face.level = level } },
@@ -254,10 +256,21 @@ class BubbleService : Service(), SensorEventListener {
 
     private suspend fun send(wav: ByteArray) {
         if (paused) return
-        val heard = laptop.listen(wav)
-        if (heard.isNullOrBlank()) return
-        label.text = heard
-        label.visibility = View.VISIBLE
+        // The laptop has one Whisper model, on CPU, shared by everything that can hear it. A real
+        // conversation nearby can make Ears detect several utterances in the time one POST takes to
+        // answer, and sending them all at once is exactly what queued the laptop 75 seconds deep on
+        // one busy night. One clip in flight at a time; a phrase spoken while this is out is simply
+        // not sent - the same choice the laptop itself now makes about its own backlog.
+        if (sending) return
+        sending = true
+        try {
+            val heard = laptop.listen(wav)
+            if (heard.isNullOrBlank()) return
+            label.text = heard
+            label.visibility = View.VISIBLE
+        } finally {
+            sending = false
+        }
     }
 
     private fun togglePause() {

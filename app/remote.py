@@ -50,6 +50,12 @@ MAX_PIN_ATTEMPTS = 5
 LOCKOUT_SECONDS = 15 * 60
 ATTEMPT_WINDOW_SECONDS = 15 * 60
 
+# One Whisper model, on CPU, shared by the wake-word pipeline, barge-in and every phone. A queue of
+# 2 (one running, one waiting) is already several seconds of delay; a third clip piling on is the
+# difference between "a moment" and the 75-second backlog that made this laptop's "hey jas" feel
+# completely broken - dropped here, it costs nothing but an honest "try again".
+MAX_QUEUED_TRANSCRIPTIONS = 2
+
 # What Whisper says when it is given near-silence. It is a generative model, so handed a second of
 # room tone it does not return nothing - it returns the most likely thing a clip of that length
 # contains, learned from captioned video: a sign-off or a filler. These arrived from an empty room.
@@ -208,13 +214,14 @@ class RemoteControl:
 
     def __init__(self, core: Jarvis, pin: str, port: int = DEFAULT_PORT,
                  assistant_name: str = "JAS", render=None, transcribe=None,
-                 certificates: Path | None = None) -> None:
+                 backlog=None, certificates: Path | None = None) -> None:
         self._core = core
         self._pin = pin
         self._port = port
         self._name = assistant_name
         self._render = render  # text -> WAV bytes, so the phone speaks in JAS's own voice
         self._transcribe = transcribe  # WAV audio -> text, done here so any phone can be talked to
+        self._backlog = backlog or (lambda: 0)  # how many transcriptions are already queued
         self._certificates = certificates
         self._said = ""
         self._heard = ""
@@ -369,6 +376,14 @@ class RemoteControl:
         wav = await request.read()
         if len(wav) < 2000:
             return web.json_response({"heard": "", "error": "I didn't catch that"})
+        if self._backlog() >= MAX_QUEUED_TRANSCRIPTIONS:
+            # There is one Whisper model, on CPU, shared by everything that can hear - the phone's
+            # microphone is always open and segments every pause into its own clip, and a real
+            # conversation nearby can queue up faster than one CPU can transcribe. Adding this clip
+            # to an already-deep queue means it gets answered a minute late, to a question nobody
+            # is still asking - dropped here it is at least an honest, immediate "try again".
+            log.info("Too much audio already queued (%d) - not adding to it", self._backlog())
+            return web.json_response({"heard": "", "error": "JAS is catching up — try again in a moment"})
         try:
             heard = await asyncio.get_running_loop().run_in_executor(None, self._transcribe, wav)
         except Exception:

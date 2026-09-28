@@ -106,3 +106,13 @@ set by hand — so coming home and leaving again does not lose it. See ADR-080 i
   certificate for the new address. Press **Pair again** and reconnect.
 - Nothing at all — check the phone is on the same Wi-Fi, and that the laptop is awake. A sleeping
   laptop cannot answer.
+
+## "JAS is catching up"
+
+There is one Whisper model, on CPU, shared by the wake-word pipeline, barge-in and every phone. If
+people are talking nearby, the phone segments every pause into its own clip and can queue up faster
+than one CPU can transcribe — this message means a clip was refused outright rather than added to
+that queue, because answering it a minute late would be worse than not answering it at all. It is
+expected occasionally with people around; if it shows up standing alone in a quiet room, something
+else is wrong — check Task Manager for a second JAS process, or another program pinning the CPU.
+See ADR-082 in `JARVIS.md`.
