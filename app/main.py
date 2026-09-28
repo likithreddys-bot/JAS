@@ -56,7 +56,7 @@ from app.voice.pipeline import (
     VoicePipeline,
     echo_reply,
 )
-from app.voice.stt.transcriber import Transcriber
+from app.voice.stt import make_transcriber
 from app.voice.tts.speaker import Speaker
 from app.voice.wake_word.detector import load_openwakeword, load_porcupine
 from app.voice.wake_word.service import WakeWordService
@@ -134,7 +134,8 @@ def start_voice(core: Jarvis, settings: Settings, services: list[WakeWordService
         start_timeout=settings.listen_start_timeout,
         max_duration=settings.listen_max_seconds,
     )
-    transcriber = Transcriber(settings.stt_model, settings.models_dir / "whisper", settings.stt_language)
+    transcriber = make_transcriber(settings.stt_backend, settings.stt_device, settings.stt_model,
+                                   settings.models_dir, settings.stt_language)
 
     def refresh_vocabulary() -> None:  # configured words + words JARVIS learned from the user
         transcriber.set_vocabulary(", ".join(filter(None, [settings.stt_vocabulary, *memory.words()])))

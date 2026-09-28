@@ -44,6 +44,17 @@ class Settings(BaseSettings):
     stt_language: str = "en"
     # Names and words speech recognition should expect (people, apps, places), comma-separated.
     stt_vocabulary: str = "JAS, Jarvis, Notepad, WhatsApp, VS Code, Chrome, YouTube"
+    # "cpu" (faster-whisper) or "openvino" (this machine's Intel GPU/NPU, via OpenVINO). Measured
+    # under real CPU load - the exact contention that once produced a 75 s transcription backlog -
+    # "openvino" on GPU took 3.6 s where "cpu" took 41 s for the same clip, because it never
+    # competes with the wake-word pipeline for the same core. Needs a one-time export first:
+    # scripts/export_whisper_openvino.py. Falls back to "cpu" automatically if that hasn't been run.
+    stt_backend: str = "cpu"
+    # OpenVINO device when stt_backend is "openvino": "GPU" works today. "NPU" is tempting - a
+    # dedicated accelerator, idle otherwise - but OpenVINO's NPU plugin needs fixed input shapes and
+    # crashed outright on this export (RuntimeError: roi_end <= max_dim); revisit once that path is
+    # better supported rather than fighting it now.
+    stt_device: str = "GPU"
 
     # Google (Calendar, Gmail, Contacts): sign in once with scripts/google_login.py
     google_client_file: Path = PROJECT_ROOT / "data" / "google_client.json"
