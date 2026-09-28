@@ -1,6 +1,8 @@
 """Runs tool calls requested by the LLM: validate → permission → execute → report.
 
-Also drives the EXECUTING / OBSERVING states and publishes step events for the UI.
+Also drives the EXECUTING / OBSERVING states and publishes step events for the UI, and gives
+failed tools one safe retry (see `run`) rather than leaving recovery entirely to the LLM's
+improvisation, per the "retry safely once if idempotent" standard in CLAUDE.md §6.
 """
 from __future__ import annotations
 
@@ -63,15 +65,33 @@ class ToolExecutor:
                 break
         self._core.bus.publish(ToolStarted(step_id, label, name))
         log.info("Tool %s(%s) [%s risk]", name, args, risk.value)
-        try:
-            result = tool.run(**args)
-        except Exception as exc:
-            log.exception("Tool %s crashed", name)
-            result = ToolResult(False, error=f"{type(exc).__name__}: {exc}")
+        result, crashed = self._attempt(tool, name, args)
+        if crashed and risk is Risk.LOW:
+            # Only a crash earns a retry, never an ordinary ok=False. A tool that raised hit
+            # something unexpected - a stale window handle, a COM call made too soon - and trying
+            # again half a second later, after re-checking cancellation, often just works. A tool
+            # that instead deliberately returned ok=False ("nothing found", "nothing to do") gave a
+            # clean, deterministic answer that will not have changed in the same instant; retrying
+            # that would only double the cost of every routine miss from a vision or COM call for
+            # no benefit. LOW risk is reused as the bar for "repeat automatically" because it is
+            # already, by this project's own definition, "safe to run with no confirmation at all" -
+            # MEDIUM/HIGH already got the user's one-time confirmation, and repeating a consequential
+            # action they were never asked to repeat is exactly what must never happen on our own
+            # initiative - a tool that half-sent a message must not risk sending it twice.
+            self._check_not_cancelled()
+            log.info("Tool %s crashed (%s) - retrying once, low risk", name, result.error)
+            result, crashed = self._attempt(tool, name, args)
         log.info("Tool %s -> %s", name, result.to_dict())
         self._core.bus.publish(ToolFinished(step_id, label, result.ok, result.error, name))
         state.transition_from(S.EXECUTING, S.OBSERVING)
         return result.to_dict()
+
+    def _attempt(self, tool: Tool, name: str, args: dict[str, Any]) -> tuple[ToolResult, bool]:
+        try:
+            return tool.run(**args), False
+        except Exception as exc:
+            log.exception("Tool %s crashed", name)
+            return ToolResult(False, error=f"{type(exc).__name__}: {exc}"), True
 
     def _check_not_cancelled(self) -> None:
         if self._core.cancelled.is_set() or self._core.state.current in (S.SLEEPING, S.STANDBY):
