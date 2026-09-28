@@ -264,10 +264,9 @@ class BubbleService : Service(), SensorEventListener {
         if (sending) return
         sending = true
         try {
-            val heard = laptop.listen(wav)
-            if (heard.isNullOrBlank()) return
-            label.text = heard
-            label.visibility = View.VISIBLE
+            laptop.listen(wav)
+            // What was heard is deliberately not shown here - voice in, voice out, nothing typed
+            // on screen. The face's mood already shows JAS is working; tap it for the state word.
         } finally {
             sending = false
         }
@@ -289,7 +288,8 @@ class BubbleService : Service(), SensorEventListener {
             last = snapshot
             face.show(snapshot)
             glow.show(snapshot)
-            if (label.isVisible() && !paused && snapshot.said.isNotEmpty()) label.text = snapshot.said
+            // The reply's words are deliberately never shown here, only spoken - see send() above.
+            if (label.isVisible() && !paused) label.text = snapshot.label
 
             if (!paused && snapshot.canSpeak && snapshot.said.isNotEmpty() && snapshot.replyId != spoken) {
                 spoken = snapshot.replyId

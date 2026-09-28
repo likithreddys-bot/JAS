@@ -407,7 +407,7 @@ class RemoteControl:
         heard = command or heard
         log.info("Remote voice: %r", heard[:80])
         self._heard, self._said = heard, ""
-        accepted = self._core.ask_text(heard, answer_here=False)
+        accepted = self._ask_core(heard)
         return web.json_response({"heard": heard, "accepted": accepted,
                                   "error": "" if accepted else "JAS is busy — try again in a moment"})
 
@@ -422,9 +422,26 @@ class RemoteControl:
         log.info("Remote request: %r", text[:80])
         self._heard, self._said = text, ""
         # The answer belongs on the phone that asked, not out loud in an empty room.
-        accepted = self._core.ask_text(text, answer_here=False)
+        accepted = self._ask_core(text)
         return web.json_response({"accepted": accepted,
                                   "error": "" if accepted else "JAS is busy — try again in a moment"})
+
+    def _ask_core(self, text: str) -> bool:
+        """Hands a request to the assistant, waking it first if it was asleep.
+
+        Asleep is not the same as busy: without this, a phone that reached JAS while it was
+        paused got "JAS is busy - try again in a moment" and would go on getting that answer no
+        matter how many times it asked, because nothing about "asleep" changes by retrying. By the
+        time this is called the request has already passed the addressing check - "hey jas ...",
+        a follow-up, or "stop" - so it is already established that this really is for JAS, and
+        waking it here is exactly what saying the wake word out loud at the laptop would do.
+        """
+        accepted = self._core.ask_text(text, answer_here=False)
+        if not accepted and self._core.paused:
+            log.info("JAS was asleep - waking it for the phone")
+            self._core.resume()
+            accepted = self._core.ask_text(text, answer_here=False)
+        return accepted
 
     def _ssl(self):
         """HTTPS, because a phone will not open its microphone on an insecure page."""

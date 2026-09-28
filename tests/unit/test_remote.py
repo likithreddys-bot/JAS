@@ -174,6 +174,40 @@ def test_a_busy_jas_says_so_rather_than_queueing(remote):
     assert out["accepted"] is False and "busy" in out["error"]
 
 
+def test_a_sleeping_jas_wakes_up_for_a_typed_request(remote):
+    """Asleep is not the same as busy - without this, the phone got "try again in a moment" and
+    would go on getting that forever, since nothing about "asleep" changes by retrying."""
+    core, control = remote
+    core.pause()
+    assert core.paused
+
+    _, out = call(control._ask, Request(body={"text": "open notepad"}))
+    assert out["accepted"] is True
+    assert core.paused is False, "must actually wake up, not just pretend to accept the request"
+    assert core.typed_request == "open notepad"
+
+
+def test_a_sleeping_jas_wakes_up_when_called_by_name_from_the_phones_voice(remote):
+    core, control = remote
+    core.pause()
+    control._transcribe = lambda wav: "Hey Jas, lock my pc"
+
+    _, out = call(control._listen, VoiceRequest())
+    assert out["accepted"] is True and out["heard"] == "lock my pc"
+    assert core.paused is False
+
+
+def test_a_sleeping_jas_is_not_woken_by_a_conversation_it_only_overheard(remote):
+    """Waking on any old noise nearby would make "pause" meaningless the moment a phone is in the
+    room - it must only wake for something actually addressed to it."""
+    core, control = remote
+    core.pause()
+    control._transcribe = lambda wav: "so anyway I told him the meeting is at five"
+
+    call(control._listen, VoiceRequest())
+    assert core.paused is True, "overheard conversation must never wake a paused JAS"
+
+
 def test_the_pin_is_six_digits_and_survives_a_restart(tmp_path):
     memory = MemoryStore(tmp_path / "memory.db")
     first = pin_for(memory)
