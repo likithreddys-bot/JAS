@@ -20,9 +20,15 @@ WIDTH, HEIGHT = 1920, 1080
 BACKDROP = (11, 14, 20)
 
 MOODS = {
-    # sphere colour, eye openness, brow angle (degrees, inward-down is positive), message
+    # sphere colour, eye openness, brow angle (degrees, inward-down is positive), message template
+    # ("{name}" is substituted with the real name in draw_face - this was hardcoded as a literal
+    # name before, so the angry warning always said "Likki"/"Alex" regardless of who was configured).
     "watchful": ((255, 196, 107), 1.00, 0, ""),
-    "angry": ((232, 92, 84), 0.62, 20, "Don't touch Alex's PC"),
+    "angry": ((232, 92, 84), 0.62, 20, "Don't touch {name}'s PC"),
+    # A brief, near-shut frame. Windows redraws the lock screen live when the image file changes
+    # even while already locked (confirmed: Windows Spotlight does the same thing), so cycling this
+    # against "watchful" every few seconds gives the lock screen a real, not simulated, blink.
+    "blink": ((255, 196, 107), 0.06, 0, ""),
 }
 
 
@@ -39,6 +45,7 @@ def draw_face(mood: str, name: str = "Alex", assistant: str = "JAS",
               with_text: bool = True) -> Image.Image:
     """JAS's sphere and its eyes. The wallpaper wants just the face; the lock screen wants words."""
     colour, openness, brow_tilt, warning = MOODS.get(mood, MOODS["watchful"])
+    warning = warning.format(name=name) if warning else warning
     image = Image.new("RGB", (WIDTH, HEIGHT), BACKDROP)
     canvas = ImageDraw.Draw(image, "RGBA")
 

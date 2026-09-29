@@ -6,6 +6,7 @@ single `OpenInputDesktop` call, so once a second costs nothing measurable.
 from __future__ import annotations
 
 import logging
+import random
 import threading
 import time
 from typing import Callable
@@ -17,6 +18,12 @@ log = logging.getLogger("jarvis.core")
 
 POLL_SECONDS = 1.0
 SETTLE_TRIES = 15  # JARVIS may be mid-sentence when the screen locks; keep asking it to rest
+
+# Windows redraws the lock screen live when the image file changes, even while already locked -
+# confirmed on the real lock screen, not assumed (Windows Spotlight rotates pictures the same way).
+# Real blinks are not metronomic, so the gap between them is randomised rather than fixed.
+BLINK_GAP_SECONDS = (3.0, 7.0)
+BLINK_SHUT_SECONDS = 1.0  # long enough to read as a blink given the redraw's own latency
 
 
 class LockWatcher:
@@ -34,6 +41,7 @@ class LockWatcher:
         self._wrong_at_lock = bad_passwords() or 0
         self._intruder = False
         self._wrong_seen = 0  # Windows resets the counter on a good login, so keep the peak
+        self._blink_stop: threading.Event | None = None
         threading.Thread(target=self._run, name="lock-watcher", daemon=True).start()
 
     def _run(self) -> None:
@@ -58,7 +66,9 @@ class LockWatcher:
             self._wrong_seen = 0
             self._face("watchful")
             self._rest()
+            self._start_blinking()
         else:
+            self._stop_blinking()
             self._greet()
 
     def _wrong_passwords_since_lock(self) -> int:
@@ -75,6 +85,31 @@ class LockWatcher:
         self._intruder = True
         log.info("Wrong password entered while locked; showing the angry face")
         self._face("angry")
+
+    def _start_blinking(self) -> None:
+        stop = threading.Event()
+        self._blink_stop = stop
+        threading.Thread(target=self._blink_loop, args=(stop,), name="lock-blink", daemon=True).start()
+
+    def _stop_blinking(self) -> None:
+        if self._blink_stop is not None:
+            self._blink_stop.set()
+            self._blink_stop = None
+
+    def _blink_loop(self, stop: threading.Event) -> None:
+        """JAS's eyes close and open again on the actual lock screen, for as long as it is locked.
+
+        Skips a cycle rather than blinking over the angry face - a warning should hold still, not
+        wink at whoever is trying passwords - and resumes on its own once that clears.
+        """
+        while not stop.wait(random.uniform(*BLINK_GAP_SECONDS)):
+            if self._intruder:
+                continue
+            self._face("blink")
+            if stop.wait(BLINK_SHUT_SECONDS):
+                return
+            if not self._intruder:
+                self._face("watchful")
 
     def _face(self, mood: str) -> None:
         if not self._set_face:
