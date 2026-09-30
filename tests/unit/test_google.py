@@ -91,9 +91,43 @@ class FakePeople:
                                                  "emailAddresses": [{"value": "rahul@example.com"}]}}]})
 
 
+class FakeDrive:
+    """Files that exist in a fake Drive - "Budget.xlsx" matches once, "Report" matches twice."""
+
+    def __init__(self):
+        self.list_call = None
+        self.shared = None
+
+    def files(self):
+        return self
+
+    CATALOGUE = [
+        {"id": "f1", "name": "Budget.xlsx", "modifiedTime": "2026-09-20T10:00:00Z",
+         "webViewLink": "https://drive/f1", "mimeType": "x"},
+        {"id": "f2", "name": "Report Draft.docx", "modifiedTime": "2026-09-21T10:00:00Z",
+         "webViewLink": "https://drive/f2", "mimeType": "x"},
+        {"id": "f3", "name": "Report Final.docx", "modifiedTime": "2026-09-22T10:00:00Z",
+         "webViewLink": "https://drive/f3", "mimeType": "x"},
+    ]
+
+    def list(self, **kwargs):
+        self.list_call = kwargs
+        # Pull the searched term straight out of "name contains 'term' and trashed = false",
+        # exactly what app/google/drive.py builds, rather than re-parsing Drive query syntax.
+        term = kwargs["q"].split("'")[1].lower()
+        return _Returns({"files": [f for f in self.CATALOGUE if term in f["name"].lower()]})
+
+    def permissions(self):
+        return self
+
+    def create(self, **kwargs):
+        self.shared = kwargs
+        return _Returns({"id": "perm1"})
+
+
 @pytest.fixture
 def tools():
-    fakes = {"calendar": FakeCalendar(), "gmail": FakeGmail(), "people": FakePeople()}
+    fakes = {"calendar": FakeCalendar(), "gmail": FakeGmail(), "people": FakePeople(), "drive": FakeDrive()}
     services = GoogleServices(lambda: object())
     services._services = fakes
     return {t.name: t for t in google_tools(services, now=lambda: NOW)}, fakes
@@ -146,6 +180,63 @@ def test_email_is_listed_read_and_replied_in_thread(tools):
     assert fakes["gmail"].sent["threadId"] == "t1"
     assert "To: Rahul <rahul@example.com>" in sent and "Subject: Re: Meeting" in sent
     assert "In-Reply-To: <abc@mail>" in sent and "Sure, 4 PM works for me." in sent
+
+
+def test_a_file_is_shared_by_name_and_google_sends_the_notification(tools):
+    tool, fakes = tools
+    result = tool["share_file"].run(name="Budget", share_with="rahul@example.com", message="here you go")
+    assert result.ok
+    assert result.data == {"shared_with": "rahul@example.com", "role": "reader", "file": "Budget.xlsx"}
+    body = fakes["drive"].shared
+    assert body["fileId"] == "f1"
+    assert body["body"] == {"type": "user", "role": "reader", "emailAddress": "rahul@example.com"}
+    assert body["sendNotificationEmail"] is True and body["emailMessage"] == "here you go"
+
+
+def test_share_with_a_contact_name_resolves_the_address_first(tools):
+    tool, fakes = tools
+    result = tool["share_file"].run(name="Budget", share_with="Rahul")
+    assert result.ok and result.data["shared_with"] == "rahul@example.com"
+
+
+def test_editing_access_can_be_asked_for(tools):
+    tool, fakes = tools
+    tool["share_file"].run(name="Budget", share_with="rahul@example.com", role="writer")
+    assert fakes["drive"].shared["body"]["role"] == "writer"
+
+
+def test_no_matching_file_is_a_clear_error_not_a_guess(tools):
+    tool, _ = tools
+    result = tool["share_file"].run(name="Nonexistent Thing", share_with="rahul@example.com")
+    assert not result.ok and "No file matches" in result.error
+
+
+def test_more_than_one_match_asks_rather_than_picking_one(tools):
+    """Sharing the wrong document with an outside person is a real mistake - guessing is not
+    acceptable here even though it might be fine for, say, opening an app."""
+    tool, fakes = tools
+    result = tool["share_file"].run(name="Report", share_with="rahul@example.com")
+    assert not result.ok
+    assert "Report Draft.docx" in result.error and "Report Final.docx" in result.error
+    assert fakes["drive"].shared is None, "nothing must be shared while it is still ambiguous"
+
+
+def test_unknown_person_to_share_with_is_reported_not_guessed(tools):
+    tool, _ = tools
+    result = tool["share_file"].run(name="Budget", share_with="Batman")
+    assert not result.ok and "No contact matches" in result.error
+
+
+def test_sharing_asks_for_confirmation_and_never_reads_the_files_content(tools):
+    tool, fakes = tools
+    share = tool["share_file"]
+    assert share.risk_for({"name": "Budget", "share_with": "rahul@example.com"}) is Risk.MEDIUM
+    question = share.confirm_question(name="Budget", share_with="rahul@example.com")
+    assert "Budget" in question and "rahul@example.com" in question
+
+    share.run(name="Budget", share_with="rahul@example.com")
+    assert fakes["drive"].list_call["fields"] == "files(id, name, modifiedTime, webViewLink, mimeType)", \
+        "the search must ask for metadata only, never a field that would return the file's content"
 
 
 def test_tools_explain_when_google_is_not_connected():

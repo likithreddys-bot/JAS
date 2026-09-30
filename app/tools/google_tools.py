@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, time, timedelta
 from typing import Callable
 
-from app.google import calendar, contacts, gmail
+from app.google import calendar, contacts, drive, gmail
 from app.google.auth import GoogleNotConnected, build_service
 from app.tools.base import Risk, Tool, ToolResult
 from app.tools.memory_tools import parse_when
@@ -120,6 +120,24 @@ def google_tools(services: GoogleServices, now: Callable[[], datetime] = datetim
         gmail.mark_read(services.get("gmail", "v1"), email_id)
         return ToolResult(True, {"marked_read": email_id})
 
+    def share_file(name: str, share_with: str, role: str = "reader", message: str = "") -> ToolResult:
+        # Metadata only - drive.find never reads what is inside the file (CLAUDE.md §2 rule 12).
+        matches = drive.find(services.get("drive", "v3"), name)
+        if not matches:
+            return ToolResult(False, error=f"No file matches {name!r} in the user's Drive.")
+        if len(matches) > 1:
+            names = "; ".join(f"{m['name']} (modified {m['modified'][:10]})" for m in matches[:5])
+            return ToolResult(False, error=f"More than one file matches {name!r}: {names}. "
+                                           "Ask the user which one they mean.")
+        email = share_with
+        if "@" not in email:
+            found = contacts.search(services.get("people", "v1"), share_with)
+            if not found:
+                return ToolResult(False, error=f"No contact matches {share_with!r}; ask the user for the address.")
+            email = found[0]["email"]
+        result = drive.share(services.get("drive", "v3"), matches[0]["id"], email, role, message)
+        return ToolResult(True, {**result, "file": matches[0]["name"]})
+
     text = {"type": "string"}
     return [
         Tool("list_meetings", "The user's meetings from Google Calendar: day can be 'today', 'tomorrow', 'week' or a date.",
@@ -158,4 +176,16 @@ def google_tools(services: GoogleServices, now: Callable[[], datetime] = datetim
              confirm_question=lambda to, subject, text="": f"Should I send this to {to}, subject {subject}? {text[:150]}"),
         Tool("mark_email_read", "Mark an email as read.", {"type": "object", "properties": {"email_id": text},
              "required": ["email_id"]}, guarded(mark_email_read), lambda email_id: "Marking as read"),
+        Tool("share_file",
+             "Share a file already in the user's Google Drive (asks the user first). Finds it by name - "
+             "never reads what is inside it. `share_with` is a name from contacts or an email address. "
+             "role is 'reader' (view, default), 'commenter' or 'writer' (can edit).",
+             {"type": "object", "properties": {
+                 "name": text, "share_with": text,
+                 "role": {"type": "string", "enum": ["reader", "commenter", "writer"]}, "message": text},
+              "required": ["name", "share_with"]},
+             guarded(share_file), lambda name, share_with, role="reader", message="": f"Sharing “{name}” with {share_with}",
+             risk=Risk.MEDIUM,
+             confirm_question=lambda name, share_with, role="reader", message="":
+                 f"Should I share “{name}” with {share_with}, {('able to edit it' if role == 'writer' else 'to view' if role == 'reader' else 'able to comment')}?"),
     ]

@@ -20,6 +20,10 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",  # read mail, mark as read
     "https://www.googleapis.com/auth/gmail.send",  # send only after the user confirms
     "https://www.googleapis.com/auth/contacts.readonly",  # look up "Rahul" -> email address
+    # Full Drive access, not the narrower drive.file - sharing an existing document means finding
+    # it by name among files JAS did not create, which drive.file cannot see at all. The file's
+    # actual content is never read: share_file only ever touches metadata (name, id) and permissions.
+    "https://www.googleapis.com/auth/drive",
 ]
 
 
