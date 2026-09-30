@@ -21,7 +21,6 @@ from app.config.settings import PROJECT_ROOT, Settings, get_settings
 from app.core.jarvis import Jarvis
 from app.core.state.states import JarvisState
 from app.google.auth import load_credentials
-from app.learning import Learner
 from app.lockart import set_lock_screen, set_wallpaper
 from app.lockscreen import LockWatcher
 from app.memory.store import MemoryStore
@@ -154,14 +153,13 @@ def start_voice(core: Jarvis, settings: Settings, services: list[WakeWordService
         tools += screen_tools(vision.ask, vision.locate, hide_ui)
     executor = ToolExecutor(core, tools)
     executor_holder["executor"] = executor
-    learner = Learner(core, memory)
-
-    def context_with_lessons() -> str:
-        """What JAS knows about the user, plus what it has learned from its own mistakes."""
-        return "\n\n".join(part for part in (memory.context(), learner.lessons()) if part)
+    # Learner (app/learning.py) used to record the text of every request plus each tool's outcome,
+    # with no consent, to learn from repeated failures. The user's rule is explicit: nothing is
+    # remembered without permission - not wired up here any more. The module itself is left in
+    # place, unused, rather than deleted, in case standing consent for it is asked for later.
 
     try:
-        respond = create_responder(settings, executor, context_with_lessons)
+        respond = create_responder(settings, executor, memory.context)
     except BrainError as exc:
         log.warning("%s Falling back to echo replies.", exc)
         respond = echo_reply

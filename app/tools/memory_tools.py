@@ -103,9 +103,11 @@ def memory_tools(
     text = {"type": "string"}
     return [
         Tool("remember", "Save a lasting fact about the user (preferences, people, projects, routines, how they "
-             "spell names). Use it on your own whenever the user shares something worth remembering.",
+             "spell names). Nothing is remembered without being asked first - only call this after the user "
+             "says yes to remembering, or directly says to remember something.",
              {"type": "object", "properties": {"fact": text}, "required": ["fact"]}, remember,
-             lambda fact: "Remembering that"),
+             lambda fact: "Remembering that", risk=Risk.MEDIUM,
+             confirm_question=lambda fact: f"Should I remember that {fact}?"),
         Tool("recall", "Search what you remember and past conversations.",
              {"type": "object", "properties": {"query": text}, "required": ["query"]}, recall, lambda query: "Recalling"),
         Tool("forget", "Forget remembered facts containing the given words (asks the user first).",
@@ -120,8 +122,11 @@ def memory_tools(
              {"type": "object", "properties": {"match": text}, "required": ["match"]}, complete_todo,
              lambda match: "Marking to-do done"),
         Tool("learn_word", "Learn a name or unusual word the user uses so speech recognition spells it right "
-             "(e.g. names of people, projects, places).", {"type": "object", "properties": {"word": text},
-             "required": ["word"]}, learn_word, lambda word: f"Learning “{word}”"),
+             "(e.g. names of people, projects, places). Nothing is remembered without being asked first - only "
+             "call this after the user says yes, or directly says to learn or remember the word.",
+             {"type": "object", "properties": {"word": text}, "required": ["word"]}, learn_word,
+             lambda word: f"Learning “{word}”", risk=Risk.MEDIUM,
+             confirm_question=lambda word: f"Should I remember the word “{word}”?"),
         Tool("create_reminder",
              "Remind the user at a time: pass `at` as a local date-time 'YYYY-MM-DDTHH:MM' (work out 'tomorrow', "
              "'tonight' etc. from the current date), or `in_minutes` for 'in 20 minutes'. repeat: none, daily, "
