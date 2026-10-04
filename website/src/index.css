@@ -1,0 +1,65 @@
+@import "tailwindcss";
+@import "@fontsource-variable/rubik";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+
+/* Design tokens — JAS-Frontend-Spec.md §4. Do not add colours outside this set. */
+@theme {
+  --color-bg: #0b0e14;
+  --color-navy: #14213d;
+  --color-ink: #fbfbf8;
+  --color-sun: #ffc46b;
+  --color-alert: #e85c54;
+  --color-earth: #46c7b0;
+  --color-muted: #8a94a8;
+
+  --font-display: "Rubik Variable", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  color-scheme: dark;
+  /* soft glass surface (spec §4) */
+  --glass-bg: rgb(20 33 61 / 0.38);
+  --glass-border: rgb(255 255 255 / 0.08);
+}
+
+html {
+  background: var(--color-bg);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
