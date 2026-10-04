@@ -63,3 +63,27 @@ h1, h2, h3, h4 {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Confirm card countdown: transform only (spec §8). */
+.confirm-countdown { animation: confirm-countdown 60s linear forwards; }
+@keyframes confirm-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* Heavy blur over a WebGL canvas is expensive on phones (spec §12): lighten it. */
+@media (max-width: 767px) {
+  .glass { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+}
+
+::selection { background: rgb(255 196 107 / 0.35); }
+:focus-visible { outline: 2px solid var(--color-sun); outline-offset: 3px; }
+
+/* Hero entrance: transform + opacity only. */
+.hero-in { opacity: 0; animation: hero-in 900ms var(--ease-enter) forwards; }
+@keyframes hero-in { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.scroll-cue { animation: scroll-cue 2.4s ease-in-out infinite; }
+@keyframes scroll-cue { 0%,100% { transform: scaleY(0.4); opacity: .4 } 50% { transform: scaleY(1); opacity: 1 } }
+@media (prefers-reduced-motion: reduce) { .hero-in { opacity: 1; } }
+
+/* Before GSAP runs, reveal targets start hidden — but only when motion is allowed and JS is on. */
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-reveal] { opacity: 0; }
+}
