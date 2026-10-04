@@ -3,8 +3,9 @@
 The public marketing site for JAS. A single scroll-driven page with one live 3D JAS core that changes
 state as you move through the story, plus a simulated confirm-gate demo.
 
-Built from `JAS-Frontend-Spec.md` (palette, states, motion, accessibility) and the JAS client
-documentation (all copy). See ADR-089 in `../JARVIS.md`.
+Built from `JAS-Frontend-Spec.md` (states, motion, accessibility) and the JAS client documentation
+(all copy). The palette is luxury black and champagne gold with no blue anywhere, chosen over the
+spec's navy/teal (ADR-090). See ADR-089 and ADR-090 in `../JARVIS.md`.
 
 ## Run
 
@@ -36,7 +37,9 @@ Pause motion, reduced motion (content visible, core static), axe scan with no se
 | `src/content.ts` | All copy. Every claim comes from the client documentation. Contact details live here. |
 | `src/core/` | The 3D core (`JasCore`), its nine states (`states.ts`), the page-wide canvas (`CoreLayer`), the 2D fallback. |
 | `src/story/director.ts` | Tiny store: which state and position the core should have right now. |
-| `src/sections/` | One file per page section. |
+| `src/sections/` | One file per page section. `Roast.tsx` is "Not Siri. Not Gemini. Just JAS." |
+| `src/core/GoldDust.tsx` | The floating gold dust behind the page. |
+| `src/ui/useTilt.ts` | 3D tilt + gold sheen for any element with `data-tilt`. |
 | `src/demo/` | The scripted, simulated demo commands. |
 | `public/lock/` | Lock-screen faces rendered by the real `app/lockart.py`. |
 

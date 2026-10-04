@@ -11,6 +11,7 @@ export const CONTACT = {
 export const HERO_LOOP_SRC: string | null = null;
 
 export const NAV = [
+  { href: "#not-siri", label: "Why JAS" },
   { href: "#problem", label: "The problem" },
   { href: "#demo", label: "Try it" },
   { href: "#how", label: "How it works" },
@@ -163,4 +164,32 @@ export const ROADMAP = {
   ],
   next: ["Joining a live call and speaking into it through the phone", "Recording and replying inside a meeting remotely"],
   later: ["Multi-user, team-scoped deployment", "Local database encryption", "Independent security audit", "Formal Google app verification"],
+};
+
+/** The roast. "Them" lines are generic caricatures of phone assistants, not quotes from any product.
+ *  Every JAS line is a capability from the client documentation. */
+export const ROAST = {
+  eyebrow: "No offence",
+  title: ["Not Siri.", "Not Gemini.", "Just JAS."],
+  body: "Phone assistants are brilliant at the weather. JAS is for the work that is stuck on your laptop.",
+  cards: [
+    {
+      them: "Here's what I found on the web.",
+      jas: "Opens the actual spreadsheet on your PC and reads you the total in column F.",
+    },
+    {
+      them: "I can set a timer for that.",
+      jas: "Sends the Q3 report from your laptop — locked, at home, three hours away.",
+    },
+    {
+      them: "Sorry, I can't do that on this device.",
+      jas: "Drives Excel on your Windows PC by voice: formulas, pivot tables, charts.",
+    },
+    {
+      them: "Sending your voice to the cloud…",
+      jas: "Hears its name and transcribes you on your own laptop. Your audio never leaves it.",
+    },
+  ],
+  disclosure:
+    "Full disclosure: JAS may rent a cloud brain — Gemini or Claude — to pick which tool to use. It gets the text of your command. Never your audio, never the keyboard. The brain can be rented. The hands are JAS's.",
 };

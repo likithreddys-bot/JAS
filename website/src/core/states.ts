@@ -3,14 +3,14 @@ import { Color } from "three";
 export { CORE_STATES, STATE_LABEL, type CoreState } from "./labels";
 import type { CoreState } from "./labels";
 
-/** Spec §4 tokens. Mirrors the @theme block in index.css: keep the two in sync. */
+/** Colour tokens. Mirrors the @theme block in index.css: keep the two in sync. */
 const T = {
-  bg: new Color("#0B0E14"),
-  ink: new Color("#FBFBF8"),
-  sun: new Color("#FFC46B"),
-  alert: new Color("#E85C54"),
-  earth: new Color("#46C7B0"),
-  muted: new Color("#8A94A8"),
+  bg: new Color("#080706"),
+  ink: new Color("#F7F1E6"),
+  sun: new Color("#E8BE76"),
+  alert: new Color("#E2553F"),
+  earth: new Color("#A8CF78"),
+  muted: new Color("#A69C8D"),
 };
 export const TOKENS = T;
 
@@ -44,6 +44,7 @@ export interface Look {
   orbit: number; // thinking particles opacity
   arc: number; // executing arc opacity
   dot: number; // paused dot opacity
+  gyro: number; // calm gold gyroscope rings (standby / responding)
 }
 
 const creamHi = mix(T.ink, T.sun, 0.3);
@@ -71,6 +72,7 @@ const base: Look = {
   orbit: 0,
   arc: 0,
   dot: 0,
+  gyro: 0,
 };
 
 const L = (o: Partial<Look>): Look => ({ ...base, ...o });
@@ -78,7 +80,7 @@ const L = (o: Partial<Look>): Look => ({ ...base, ...o });
 /** One look per state. Each must be recognisable without reading any text (spec §13). */
 export const LOOKS: Record<CoreState, Look> = {
   // breathing, half-open eyes, blinking
-  standby: L({}),
+  standby: L({ gyro: 1 }),
   // brighter, wide attentive eyes, audio-reactive ring
   listening: L({
     body: mix(T.ink, T.sun, 0.16),
@@ -108,12 +110,12 @@ export const LOOKS: Record<CoreState, Look> = {
     breathPeriod: 2.4,
     orbit: 1,
   }),
-  // teal, eyes toward the checklist, steady scanning arc
+  // soft green-gold, eyes toward the checklist, steady scanning arc
   executing: L({
-    body: mix(T.ink, T.earth, 0.28),
-    edge: mix(T.sun, T.earth, 0.55),
+    body: mix(T.ink, T.earth, 0.14),
+    edge: mix(T.sun, T.earth, 0.35),
     rim: T.earth,
-    halo: mix(T.earth, T.sun, 0.22),
+    halo: mix(T.earth, T.sun, 0.45),
     haloI: 0.65,
     rimI: 1.0,
     open: 0.85,
@@ -143,6 +145,7 @@ export const LOOKS: Record<CoreState, Look> = {
   }),
   // pulses with the voice output
   responding: L({
+    gyro: 0.6,
     haloI: 0.8,
     rimI: 1.0,
     open: 0.9,
@@ -150,12 +153,12 @@ export const LOOKS: Record<CoreState, Look> = {
     breathAmp: 0.01,
     pulseAmp: 1,
   }),
-  // teal, eyes softly closed, one ring (see JasCore: returns to standby after 1.6 s)
+  // green-gold, eyes softly closed, one ring (see JasCore: returns to standby after 1.6 s)
   success: L({
-    body: mix(T.ink, T.earth, 0.3),
-    edge: T.earth,
+    body: mix(T.ink, T.sun, 0.22),
+    edge: mix(T.sun, T.earth, 0.5),
     rim: T.earth,
-    halo: T.earth,
+    halo: mix(T.earth, T.sun, 0.4),
     haloI: 0.95,
     rimI: 1.1,
     open: 0.1,

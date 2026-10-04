@@ -31,15 +31,15 @@ export function CoreFallback({ state, anchor, narrow }: { state: CoreState; anch
         <circle r="100" fill="url(#fb-body)" />
         {[-1, 1].map((side) => (
           <g key={side} transform={`translate(${side * 32} -2)`}>
-            <ellipse rx="20" ry={20 * open} fill="#FBFBF8" />
-            {open > 0.2 && <circle r="10" fill="#0B0E14" />}
+            <ellipse rx="20" ry={20 * open} fill="#F7F1E6" />
+            {open > 0.2 && <circle r="10" fill="#080706" />}
             <rect
               x="-17"
               y={-34 - look.browLift * 100}
               width="34"
               height="4"
               rx="2"
-              fill="#0B0E14"
+              fill="#080706"
               transform={`rotate(${((side * look.browTilt * 180) / Math.PI) * -1} 0 ${-32 - look.browLift * 100})`}
             />
           </g>

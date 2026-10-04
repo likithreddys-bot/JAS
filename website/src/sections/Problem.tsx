@@ -13,7 +13,7 @@ export function Problem() {
 
       <ul className="mt-14 grid gap-4 md:gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {SCENARIOS.map((s, i) => (
-          <li key={s.name} data-reveal style={{ transitionDelay: `${i * 40}ms` }} className="glass group p-6 md:p-7 flex flex-col">
+          <li key={s.name} data-reveal style={{ transitionDelay: `${i * 40}ms` }} data-tilt className="glass group p-6 md:p-7 flex flex-col">
             <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-sun/90">{s.condition}</p>
             <h3 className="mt-3 text-xl font-semibold">
               {s.name}
@@ -23,7 +23,7 @@ export function Problem() {
             <div className="mt-auto pt-5">
               <div className="h-px bg-white/8 mb-4" />
               <p className="flex gap-3 text-[15px] leading-relaxed text-ink">
-                <span aria-hidden className="mt-1.5 size-2 shrink-0 rounded-full bg-earth shadow-[0_0_10px_rgb(70_199_176/0.7)]" />
+                <span aria-hidden className="mt-1.5 size-2 shrink-0 rounded-full bg-earth shadow-[0_0_10px_rgb(168_207_120/0.7)]" />
                 <span>
                   <span className="sr-only">With JAS: </span>
                   {s.solution}

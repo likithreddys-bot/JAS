@@ -31,7 +31,7 @@ export function Honest() {
 function Column({ title, tone, items }: { title: string; tone: "earth" | "sun" | "muted"; items: string[] }) {
   const dot = tone === "earth" ? "bg-earth" : tone === "sun" ? "bg-sun" : "bg-muted";
   return (
-    <div data-reveal className="glass p-6">
+    <div data-reveal data-tilt className="glass p-6">
       <h3 className="flex items-center gap-2.5 text-sm font-medium uppercase tracking-[0.16em] text-ink/80">
         <span aria-hidden className={`size-2 rounded-full ${dot}`} />
         {title}

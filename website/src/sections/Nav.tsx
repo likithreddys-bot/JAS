@@ -10,7 +10,7 @@ export function Nav() {
         className="glass mx-auto max-w-6xl flex items-center gap-4 px-4 md:px-6 py-2.5 !rounded-full"
       >
         <a href="#top" className="flex items-center gap-2.5 font-display text-lg font-semibold tracking-tight">
-          <span aria-hidden className="relative inline-block size-3.5 rounded-full bg-sun shadow-[0_0_14px_2px_rgb(255_196_107/0.6)]" />
+          <span aria-hidden className="relative inline-block size-3.5 rounded-full bg-sun shadow-[0_0_14px_2px_rgb(232_190_118/0.6)]" />
           JAS
         </a>
         <ul className="hidden lg:flex items-center gap-1 ml-6 text-sm text-muted">

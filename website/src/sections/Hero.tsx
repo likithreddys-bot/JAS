@@ -22,7 +22,7 @@ export function Hero() {
         <h1 className="mt-5 text-[clamp(2.75rem,6vw,5.25rem)] font-semibold leading-[0.98] tracking-[-0.035em]">
           {HERO.title.map((line, i) => (
             <span key={line} className="hero-in block whitespace-nowrap" style={{ animationDelay: `${200 + i * 120}ms` }}>
-              {i === HERO.title.length - 1 ? <span className="text-sun">{line}</span> : line}
+              {i === HERO.title.length - 1 ? <span className="gold-text">{line}</span> : line}
             </span>
           ))}
         </h1>

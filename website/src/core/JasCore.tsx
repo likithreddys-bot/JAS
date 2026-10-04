@@ -21,7 +21,7 @@ import { LOOKS, TOKENS, type CoreState, type Look } from "./states";
 
 const NUM_KEYS = [
   "haloI", "rimI", "open", "pupil", "browLift", "browTilt", "lookX", "lookY", "follow",
-  "breathAmp", "breathPeriod", "pulseAmp", "pulsePeriod", "ring", "orbit", "arc", "dot",
+  "breathAmp", "breathPeriod", "pulseAmp", "pulsePeriod", "ring", "orbit", "arc", "dot", "gyro",
 ] as const satisfies readonly (keyof Look)[];
 const COLOR_KEYS = ["body", "edge", "rim", "halo"] as const satisfies readonly (keyof Look)[];
 
@@ -193,6 +193,8 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
   const arc = useRef<Mesh>(null);
   const orbit = useRef<Points>(null);
   const dot = useRef<Mesh>(null);
+  const gyroA = useRef<Mesh>(null);
+  const gyroB = useRef<Mesh>(null);
 
   // --- animation state (mutated each frame, never causes a re-render) ---
   const cur = useRef<Look>(structuredCloneLook(LOOKS.standby));
@@ -339,6 +341,19 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
     orbitMat.uniforms.uColor.value.copy(TOKENS.sun);
     if (orbit.current) orbit.current.visible = c.orbit > 0.01;
 
+    // --- gyroscope rings: two thin gold hoops turning slowly on different axes ---
+    const g = c.gyro;
+    for (const [m, sx, sy, base] of [
+      [gyroA.current, 0.21, 0.33, 0.5],
+      [gyroB.current, -0.17, 0.26, 0.38],
+    ] as const) {
+      if (!m) continue;
+      m.visible = g > 0.01;
+      m.rotation.x = 1.1 + t * sx;
+      m.rotation.y = t * sy;
+      (m.material as MeshBasicMaterial).opacity = g * base;
+    }
+
     // --- paused dot ---
     if (dot.current) {
       (dot.current.material as MeshBasicMaterial).opacity = c.dot;
@@ -431,6 +446,16 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
           })}
         </group>
       </group>
+
+      {/* standby: gyroscope rings */}
+      <mesh ref={gyroA} scale={1.55} visible={false}>
+        <torusGeometry args={[1, 0.0045, 6, 200]} />
+        <meshBasicMaterial color={TOKENS.sun} transparent opacity={0} blending={AdditiveBlending} depthWrite={false} toneMapped={false} />
+      </mesh>
+      <mesh ref={gyroB} scale={1.78} visible={false}>
+        <torusGeometry args={[1, 0.0035, 6, 200]} />
+        <meshBasicMaterial color={TOKENS.sun} transparent opacity={0} blending={AdditiveBlending} depthWrite={false} toneMapped={false} />
+      </mesh>
 
       {/* paused: one steady dot */}
       <mesh ref={dot} position={[0, -1.5, 0]} visible={false}>

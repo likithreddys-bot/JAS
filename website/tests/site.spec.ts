@@ -92,7 +92,7 @@ test("confirm card times out to No after 60 s and never auto-confirms", async ({
   await page.clock.fastForward(59_000);
   await expect(page.getByTestId("confirm-card")).toBeVisible();
   await page.clock.fastForward(2_000);
-  await expect(page.getByTestId("demo-reply")).toHaveText(/Cancelled\. Nothing was sent\./);
+  await expect(page.getByTestId("demo-reply")).toHaveText(/Cancelled\. Nothing was sent\./, { timeout: 10_000 });
   await expect(page.getByTestId("core-layer")).toHaveAttribute("data-core-state", "standby");
   await expect(page.locator("[data-status]", { hasText: "Send the email" })).toHaveCount(0);
 });

@@ -4,15 +4,16 @@
 @import "@fontsource/ibm-plex-sans/500.css";
 @import "@fontsource/ibm-plex-mono/400.css";
 
-/* Design tokens — JAS-Frontend-Spec.md §4. Do not add colours outside this set. */
+/* Design tokens. Luxury black + champagne gold, chosen by the user over spec §4 (ADR-090).
+ * No blue anywhere: every token has blue as its weakest channel. Do not add colours outside this set. */
 @theme {
-  --color-bg: #0b0e14;
-  --color-navy: #14213d;
-  --color-ink: #fbfbf8;
-  --color-sun: #ffc46b;
-  --color-alert: #e85c54;
-  --color-earth: #46c7b0;
-  --color-muted: #8a94a8;
+  --color-bg: #080706;
+  --color-coal: #17130f;
+  --color-ink: #f7f1e6;
+  --color-sun: #e8be76;
+  --color-alert: #e2553f;
+  --color-earth: #a8cf78;
+  --color-muted: #a69c8d;
 
   --font-display: "Rubik Variable", system-ui, sans-serif;
   --font-body: "IBM Plex Sans", system-ui, sans-serif;
@@ -24,8 +25,8 @@
 :root {
   color-scheme: dark;
   /* soft glass surface (spec §4) */
-  --glass-bg: rgb(20 33 61 / 0.38);
-  --glass-border: rgb(255 255 255 / 0.08);
+  --glass-bg: rgb(23 19 15 / 0.62);
+  --glass-border: rgb(232 190 118 / 0.12);
 }
 
 html {
@@ -73,7 +74,7 @@ h1, h2, h3, h4 {
   .glass { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 }
 
-::selection { background: rgb(255 196 107 / 0.35); }
+::selection { background: rgb(232 190 118 / 0.35); }
 :focus-visible { outline: 2px solid var(--color-sun); outline-offset: 3px; }
 
 /* Hero entrance: transform + opacity only. */
@@ -87,3 +88,71 @@ h1, h2, h3, h4 {
 @media (prefers-reduced-motion: no-preference) {
   .js [data-reveal] { opacity: 0; }
 }
+
+/* 3D tilt cards: a soft gold sheen follows the pointer (set by useTilt). */
+[data-tilt] {
+  position: relative;
+  transition: transform 500ms var(--ease-enter);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+[data-tilt]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 400ms;
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgb(232 190 118 / 0.13), transparent 45%);
+}
+[data-tilt]:hover::after { opacity: 1; }
+
+/* Hairline gold edge on glass, brighter at the top: reads as polished metal on black. */
+.glass {
+  background-image: linear-gradient(180deg, rgb(232 190 118 / 0.06), transparent 40%);
+  box-shadow: inset 0 1px 0 rgb(247 241 230 / 0.06), 0 30px 80px -40px rgb(0 0 0 / 0.9);
+}
+
+/* Gold foil text: a slow light sweep across the gradient. */
+.gold-text {
+  background: linear-gradient(100deg, #b98b45 0%, #e8be76 30%, #f7e2b4 45%, #e8be76 60%, #b98b45 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: gold-sweep 6s ease-in-out infinite;
+}
+@keyframes gold-sweep { 0%, 100% { background-position: 100% 0; } 50% { background-position: 0% 0; } }
+
+/* 3D flip cards (roast section). */
+.flip-scene { perspective: 1400px; }
+.flip-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 15rem;
+  text-align: left;
+  transform-style: preserve-3d;
+  transition: transform 1000ms var(--ease-enter);
+  cursor: pointer;
+}
+.flip-card.is-flipped { transform: rotateY(180deg); }
+.flip-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 1.75rem;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-back {
+  transform: rotateY(180deg);
+  border-color: rgb(232 190 118 / 0.45);
+  box-shadow: 0 0 0 1px rgb(232 190 118 / 0.15), 0 30px 90px -30px rgb(232 190 118 / 0.35);
+}
+/* Reduced motion: no 3D, both sides readable, stacked. */
+.flip-card.is-static { transform: none; min-height: 0; }
+.flip-card.is-static .flip-face { position: relative; transform: none; backface-visibility: visible; }
+.flip-card.is-static .flip-back { margin-top: 0.75rem; }

@@ -13,7 +13,7 @@ export function Trust() {
         </p>
         <ol className="mt-10 space-y-3">
           {SECURITY.map((s, i) => (
-            <li key={s.title} data-reveal className="glass p-5 md:p-6 flex gap-5">
+            <li key={s.title} data-reveal data-tilt className="glass p-5 md:p-6 flex gap-5">
               <span className="font-mono text-sm text-earth pt-0.5">0{i + 1}</span>
               <div>
                 <h3 className="text-lg font-semibold">{s.title}</h3>

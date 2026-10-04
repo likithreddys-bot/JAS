@@ -4,6 +4,7 @@ import { PerformanceMonitor } from "@react-three/drei";
 import type { Group, PerspectiveCamera } from "three";
 import { JasCore } from "./JasCore";
 import { CoreFallback } from "./CoreFallback";
+import { GoldDust } from "./GoldDust";
 import { useReducedMotion } from "./useReducedMotion";
 import { effectiveState, useDirector, type Anchor } from "../story/director";
 
@@ -23,8 +24,7 @@ function CameraRig() {
 }
 
 /** Target placement for each anchor, in world units relative to the visible viewport. */
-function placement(anchor: Anchor, w: number, h: number, narrow: boolean) {
-  if (anchor === "hidden") return { x: 0, y: -h * 0.85, s: 0.5 };
+function placement(anchor: Exclude<Anchor, "hidden">, w: number, h: number, narrow: boolean) {
   if (narrow) {
     if (anchor === "hero") return { x: 0, y: h * 0.28, s: 0.74 };
     if (anchor === "center") return { x: 0, y: 0, s: 0.85 };
@@ -52,9 +52,18 @@ function Mover({ anchor, narrow, reduced, children }: { anchor: Anchor; narrow: 
   useEffect(() => invalidate(), [anchor, invalidate]);
   useFrame((_, dt) => {
     if (!g.current) return;
-    const p = placement(anchor, viewport.width, viewport.height, narrow);
-    const k = reduced || first.current ? 1 : 1 - Math.exp(-6 * Math.min(dt, 0.05));
-    first.current = false;
+    // "hidden" shrinks the core away where it stands instead of flying it across the text.
+    const p =
+      anchor === "hidden"
+        ? { x: g.current.position.x, y: g.current.position.y, s: 0.001 }
+        : placement(anchor, viewport.width, viewport.height, narrow);
+    if (first.current) {
+      // Entrance: the core materialises in place, unless motion is reduced.
+      g.current.position.set(p.x, p.y, 0);
+      g.current.scale.setScalar(reduced ? p.s : 0.001);
+      first.current = false;
+    }
+    const k = reduced ? 1 : 1 - Math.exp(-(g.current.scale.x < p.s * 0.6 ? 2.6 : 6) * Math.min(dt, 0.05));
     g.current.position.x += (p.x - g.current.position.x) * k;
     g.current.position.y += (p.y - g.current.position.y) * k;
     const s = g.current.scale.x + (p.s - g.current.scale.x) * k;
@@ -100,18 +109,22 @@ export default function CoreLayer() {
   // On phones there is no side column: the core steps out of side-anchored sections
   // rather than sitting behind their text.
   const offstage = d.anchor === "hidden" || (narrow && (d.anchor === "left" || d.anchor === "right"));
+  const [coreVisible, setCoreVisible] = useState(true);
+  useEffect(() => setCoreVisible(!offstage), [offstage]);
 
   return (
     <div
       aria-hidden
       className="fixed inset-0 z-0 pointer-events-none transition-opacity duration-700"
-      style={{ opacity: offstage ? 0 : 1 }}
+      data-core-visible={coreVisible}
       data-testid="core-layer"
       data-core-state={state}
       data-core-anchor={d.anchor}
     >
       {fallback ? (
-        <CoreFallback state={state} anchor={d.anchor} narrow={narrow} />
+        <div className="transition-opacity duration-500" style={{ opacity: offstage ? 0 : 1 }}>
+          <CoreFallback state={state} anchor={d.anchor} narrow={narrow} />
+        </div>
       ) : (
         <Canvas
           flat
@@ -128,7 +141,8 @@ export default function CoreLayer() {
             onFallback={() => setFallback(true)}
           />
           <CameraRig />
-          <Mover anchor={d.anchor} narrow={narrow} reduced={reduced}>
+          <GoldDust reduced={reduced} dim={narrow ? 0.6 : 1} />
+          <Mover anchor={offstage ? "hidden" : d.anchor} narrow={narrow} reduced={reduced}>
             <JasCore state={state} reduced={reduced} />
           </Mover>
         </Canvas>

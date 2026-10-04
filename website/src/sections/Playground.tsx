@@ -7,10 +7,10 @@ const HOW: Record<CoreState, string> = {
   standby: "Breathes slowly, eyes half-open, blinks every few seconds.",
   listening: "Brightens; a ring pulses with your voice.",
   thinking: "Dims slightly; particles orbit while it decides.",
-  executing: "Turns teal; a steady arc tracks the work.",
+  executing: "Warms to green-gold; a steady arc tracks the work.",
   confirming: "Deepens to amber and waits for your yes.",
   responding: "Pulses with its own voice.",
-  success: "One clean teal ring — only after a real success.",
+  success: "One clean green-gold ring — only after a real success.",
   error: "Turns red, brows drop, and it tells you why.",
   paused: "Motion stops. One steady dot remains.",
 };

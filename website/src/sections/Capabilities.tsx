@@ -86,7 +86,7 @@ export function Capabilities() {
       <div className="mt-14 grid gap-10 lg:grid-cols-[1.15fr_1fr] items-start">
         <ul className="grid gap-4 sm:grid-cols-2">
           {CAPABILITIES.map((c) => (
-            <li key={c.title} data-reveal className="glass p-6">
+            <li key={c.title} data-reveal data-tilt className="glass p-6">
               <h3 className="text-lg font-semibold">{c.title}</h3>
               <p className="mt-2 text-[15px] leading-relaxed text-ink/65">{c.body}</p>
             </li>

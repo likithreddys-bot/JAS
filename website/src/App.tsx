@@ -4,6 +4,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Nav } from "./sections/Nav";
 import { Hero } from "./sections/Hero";
 import { Thesis } from "./sections/Thesis";
+import { Roast } from "./sections/Roast";
 import { Problem } from "./sections/Problem";
 import { Demo } from "./sections/Demo";
 import { HowItWorks } from "./sections/HowItWorks";
@@ -14,6 +15,7 @@ import { Honest } from "./sections/Honest";
 import { Playground } from "./sections/Playground";
 import { Contact } from "./sections/Contact";
 import { FpsMeter } from "./dev/FpsMeter";
+import { useTilt } from "./ui/useTilt";
 import { useReducedMotion } from "./core/useReducedMotion";
 import { STATE_LABEL } from "./core/labels";
 import { effectiveState, useDirector } from "./story/director";
@@ -27,6 +29,11 @@ const DEV = new URLSearchParams(location.search).has("dev");
 export default function App() {
   const reduced = useReducedMotion();
   const d = useDirector();
+  useTilt(!reduced && !d.paused);
+  useLayoutEffect(() => {
+    if (d.paused) document.body.dataset.paused = "1";
+    else delete document.body.dataset.paused;
+  }, [d.paused]);
 
   // Gentle reveal for anything marked data-reveal. Transform + opacity only.
   useLayoutEffect(() => {
@@ -36,7 +43,12 @@ export default function App() {
         start: "top 90%",
         once: true,
         onEnter: (els) =>
-          gsap.fromTo(els, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.9, ease: "expo.out", stagger: 0.06 }),
+          gsap.fromTo(
+            els,
+            { opacity: 0, y: 24 },
+            // clearProps hands `transform` back to CSS / the tilt effect once the reveal is done.
+            { opacity: 1, y: 0, duration: 0.9, ease: "expo.out", stagger: 0.06, clearProps: "transform" },
+          ),
       });
     });
     // Fonts and lazy images change layout: re-measure once they land.
@@ -63,6 +75,7 @@ export default function App() {
       <main className="relative z-10">
         <Hero />
         <Thesis />
+        <Roast />
         <Problem />
         <Demo />
         <HowItWorks />
