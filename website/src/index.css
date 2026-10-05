@@ -1,7 +1,6 @@
 @import "tailwindcss";
-@import "@fontsource-variable/rubik";
-@import "@fontsource/ibm-plex-sans/400.css";
-@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource-variable/inter-tight";
+@import "@fontsource-variable/inter";
 @import "@fontsource/ibm-plex-mono/400.css";
 
 /* Design tokens. Luxury black + champagne gold, chosen by the user over spec §4 (ADR-090).
@@ -15,8 +14,9 @@
   --color-earth: #a8cf78;
   --color-muted: #a69c8d;
 
-  --font-display: "Rubik Variable", system-ui, sans-serif;
-  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  /* Closest open match to Apple's SF Pro: Inter Tight for display, Inter for text. */
+  --font-display: "Inter Tight Variable", -apple-system, "SF Pro Display", system-ui, sans-serif;
+  --font-body: "Inter Variable", -apple-system, "SF Pro Text", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
   --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
@@ -45,7 +45,8 @@ body {
 
 h1, h2, h3, h4 {
   font-family: var(--font-display);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+  font-weight: 600;
 }
 
 .glass {

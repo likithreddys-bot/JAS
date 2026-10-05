@@ -3,32 +3,31 @@ import { useFrame, useThree } from "@react-three/fiber";
 import {
   AdditiveBlending,
   Color,
-  Euler,
   type Group,
   type Mesh,
   MathUtils,
   type MeshBasicMaterial,
   ShaderMaterial,
   type Points,
+  Vector2,
 } from "three";
 import { GLASS, LOOKS, TOKENS, type CoreState, type Look } from "./states";
 
 /* ---------------------------------------------------------------------------
- * The JAS core: a smoked-glass sphere with light moving inside it, two round
- * glowing eyes, and rings of light that ripple as they revolve around it.
+ * The JAS core: a smoked-glass sphere with light moving inside it that drifts
+ * toward the pointer, and rings of light that ripple as they revolve around it.
  * Everything animates through transforms and uniforms: no layout, no per-frame
  * allocation.
  * ------------------------------------------------------------------------- */
 
 const NUM_KEYS = [
-  "haloI", "rimI", "glow", "open", "eyeSize", "lidTilt", "smile", "lookX", "lookY", "follow",
+  "haloI", "rimI", "glow",
   "breathAmp", "breathPeriod", "pulseAmp", "pulsePeriod", "waves", "waveAmp", "waveSpeed", "orbit", "arc", "dot",
 ] as const satisfies readonly (keyof Look)[];
-const COLOR_KEYS = ["core", "swirl", "rim", "halo", "eye"] as const satisfies readonly (keyof Look)[];
+const COLOR_KEYS = ["core", "swirl", "rim", "halo"] as const satisfies readonly (keyof Look)[];
 
 /** Cross-fade speed. 1 - exp(-lambda*dt) reaches ~98% in ~400 ms at lambda = 10 (spec §8). */
 const FADE = 10;
-const BLINK_MS = 0.18; // spec §8: 1.0 -> 0.06 -> 1.0 over 180 ms
 const ORBIT_SECONDS = 1.2; // spec §6: particles orbit in a 1.2 s loop
 const SUCCESS_RING_SECONDS = 0.6; // spec §6
 const SUCCESS_HOLD_SECONDS = 1.6; // then back to standby
@@ -80,7 +79,7 @@ const BODY_VERT = /* glsl */ `
 /* Smoked glass: dark at the edge, light glowing from inside, studio reflections on the surface. */
 const BODY_FRAG = /* glsl */ `
   uniform vec3 uCore; uniform vec3 uSwirl; uniform vec3 uRim; uniform vec3 uGlass;
-  uniform float uRimI; uniform float uGlow; uniform float uTime; uniform float uPulse;
+  uniform float uRimI; uniform float uGlow; uniform float uTime; uniform float uPulse; uniform vec2 uLook;
   varying vec3 vN; varying vec3 vV; varying vec3 vObj;
   ${NOISE}
   void main() {
@@ -91,7 +90,9 @@ const BODY_FRAG = /* glsl */ `
     // Light inside the glass: strongest at the heart, slowly swirling.
     float n1 = snoise(vObj * 1.5 + vec3(0.0, uTime * 0.13, uTime * 0.07));
     float n2 = snoise(vObj * 3.2 - vec3(uTime * 0.09, 0.0, uTime * 0.05));
-    float depth = pow(ndv, 1.35);
+    // The heart of the light sits where the orb is "looking".
+    float aim = clamp(dot(N, normalize(vec3(uLook, 1.0))), 0.0, 1.0);
+    float depth = pow(mix(ndv, aim, 0.55), 1.35);
     float plasma = clamp(depth * (0.86 + 0.16 * n1 + 0.06 * n2), 0.0, 1.2);
     vec3 inner = mix(uSwirl, uCore, smoothstep(0.12, 0.7, plasma));
     float fill = clamp(plasma * uGlow * (1.0 + uPulse), 0.0, 1.35);
@@ -126,40 +127,6 @@ const GLOW_FRAG = /* glsl */ `
     float r = length(vUv - 0.5) * 2.0;
     float a = smoothstep(1.0, uInner, r);
     gl_FragColor = vec4(uColor, a * a * uI);
-    #include <colorspace_fragment>
-  }
-`;
-
-/* One eye: a round glowing shape with no pupil. Lids cut it (cross / worried), blinking squashes
- * it, and "smile" turns it into a happy arc. All in a signed-distance field on a small quad. */
-const EYE_FRAG = /* glsl */ `
-  uniform vec3 uColor; uniform float uOpen; uniform float uSize; uniform float uTilt;
-  uniform float uSmile; uniform float uSide;
-  varying vec2 vUv;
-  void main() {
-    vec2 p = (vUv - 0.5) * 2.0;
-    float r = 0.52 * uSize;
-    // Round eye, squashed vertically as it closes.
-    vec2 q = vec2(p.x, p.y / max(uOpen, 0.06));
-    float dEye = length(q) - r;
-    // Lid: a straight edge across the top, sloped toward or away from the nose.
-    float lidY = r * (1.05 - 1.25 * abs(uTilt)) * max(uOpen, 0.06);
-    float dLid = p.y - (lidY + uSide * uTilt * 1.15 * p.x);
-    float dRound = max(dEye, dLid);
-    // Happy arc: the top of a ring, like a smiling closed eye.
-    vec2 c = vec2(0.0, -r * 0.55);
-    float dArc = abs(length(p - c) - r * 1.0) - r * 0.17;
-    dArc = max(dArc, -(p.y - c.y - r * 0.15));
-    float d = mix(dRound, dArc, uSmile);
-
-    float aa = 0.025;
-    float body = smoothstep(aa, -aa, d);
-    float glow = exp(-max(d, 0.0) * 6.0) * 0.8;
-    // Fade the glow out before the edge of the quad, or the quad's square outline shows.
-    glow *= smoothstep(1.0, 0.7, max(abs(p.x), abs(p.y)));
-    float centre = 1.0 - 0.18 * clamp(length(p) / max(r, 0.01), 0.0, 1.0);
-    vec3 col = uColor * (body * centre * 1.15 + glow * 0.75);
-    gl_FragColor = vec4(col, max(body, glow * 0.8));
     #include <colorspace_fragment>
   }
 `;
@@ -219,10 +186,6 @@ const ORBIT_FRAG = /* glsl */ `
   }
 `;
 
-const EYE_YAW = 0.31; // each eye's angle around the sphere from the centre line, radians
-const EYE_PITCH = -0.04; // slightly above the equator
-const EYE_QUAD = 0.62; // world size of each eye's quad (shape + glow)
-
 /** Three revolving wave rings: [radius, tilt, frequency, phase, revolutions per second].
  *  Frequencies must be even so every harmonic in WAVE_VERT is a whole number: an odd or fractional
  *  one breaks the ring where the angle wraps from +pi to -pi. */
@@ -250,7 +213,7 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
         fragmentShader: BODY_FRAG,
         uniforms: {
           uCore: { value: new Color() }, uSwirl: { value: new Color() }, uRim: { value: new Color() },
-          uGlass: { value: GLASS.clone() }, uRimI: { value: 1 }, uGlow: { value: 1 }, uTime: { value: 0 }, uPulse: { value: 0 },
+          uGlass: { value: GLASS.clone() }, uLook: { value: new Vector2() }, uRimI: { value: 1 }, uGlow: { value: 1 }, uTime: { value: 0 }, uPulse: { value: 0 },
         },
       }),
     [],
@@ -266,24 +229,6 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
     });
   const halo = useMemo(() => makeGlow(0.25), []);
   const pool = useMemo(() => makeGlow(0.0), []);
-  const eyeMats = useMemo(
-    () =>
-      [-1, 1].map(
-        (side) =>
-          new ShaderMaterial({
-            vertexShader: GLOW_VERT,
-            fragmentShader: EYE_FRAG,
-            uniforms: {
-              uColor: { value: new Color() }, uOpen: { value: 1 }, uSize: { value: 1 },
-              uTilt: { value: 0 }, uSmile: { value: 0 }, uSide: { value: side },
-            },
-            transparent: true,
-            depthTest: false,
-            depthWrite: false,
-          }),
-      ),
-    [],
-  );
   // Each ring is drawn twice: a crisp line, and a wide soft tube around it that reads as glow.
   const makeWaveMats = (soft: number) =>
       WAVES.map(
@@ -330,7 +275,6 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
 
   // --- scene refs ---
   const breath = useRef<Group>(null);
-  const head = useRef<Group>(null);
   const waveGroup = useRef<Group>(null);
   const successRing = useRef<Mesh>(null);
   const arc = useRef<Mesh>(null);
@@ -339,7 +283,7 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
 
   // --- animation state (mutated each frame, never causes a re-render) ---
   const cur = useRef<Look>(cloneLook(LOOKS.standby));
-  const anim = useRef({ time: 0, level: 0, prevState: state, enteredAt: 0, nextBlink: 3.5, blinkStart: -10, px: 0, py: 0 });
+  const anim = useRef({ time: 0, level: 0, prevState: state, enteredAt: 0, px: 0, py: 0 });
 
   useEffect(() => {
     const on = (e: PointerEvent) => {
@@ -402,30 +346,12 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
     pool.uniforms.uColor.value.copy(c.halo);
     pool.uniforms.uI.value = c.haloI * 0.5;
 
-    // --- gaze: the face turns toward the pointer, blended with the state's own direction ---
-    const follow = reduced ? 0 : c.follow;
-    const lx = MathUtils.lerp(c.lookX, a.px, follow);
-    const ly = MathUtils.lerp(c.lookY, a.py, follow);
-    if (head.current) {
-      head.current.rotation.y = lx * 0.24;
-      head.current.rotation.x = -ly * 0.16;
-    }
-
-    // --- blink: 1 -> 0.06 -> 1 over 180 ms, every 3-7 s (spec §8) ---
-    if (!reduced && now > a.nextBlink && c.open > 0.3 && c.smile < 0.5) {
-      a.blinkStart = now;
-      a.nextBlink = now + 3 + Math.random() * 4;
-    }
-    const bp = (now - a.blinkStart) / BLINK_MS;
-    const blink = bp >= 0 && bp <= 1 ? 1 - 0.94 * Math.sin(Math.PI * bp) : 1;
-    for (const m of eyeMats) {
-      const u = m.uniforms;
-      u.uColor.value.copy(c.eye);
-      u.uOpen.value = Math.max(0.06, c.open * blink);
-      u.uSize.value = c.eyeSize * (1 + voice * 0.06);
-      u.uTilt.value = c.lidTilt;
-      u.uSmile.value = c.smile;
-    }
+    // --- the light inside drifts toward the pointer, so the orb feels aware without a face ---
+    const follow = reduced ? 0 : 1;
+    bu.uLook.value.set(
+      bu.uLook.value.x + (a.px * 0.35 * follow - bu.uLook.value.x) * 0.06,
+      bu.uLook.value.y + (a.py * 0.3 * follow - bu.uLook.value.y) * 0.06,
+    );
 
     // --- revolving wave rings ---
     const amp = c.waveAmp * (1 + voice * 2.4);
@@ -524,17 +450,6 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
         <mesh material={body}>
           <sphereGeometry args={[1, 96, 64]} />
         </mesh>
-
-        {/* face: two round glowing eyes, glued to the glass, turning toward what JAS looks at */}
-        <group ref={head}>
-          {[0, 1].map((i) => (
-            <group key={i} rotation={new Euler(EYE_PITCH, (i === 0 ? -1 : 1) * EYE_YAW, 0, "YXZ")}>
-              <mesh position={[0, 0, 1.002]} material={eyeMats[i]} renderOrder={10}>
-                <planeGeometry args={[EYE_QUAD, EYE_QUAD]} />
-              </mesh>
-            </group>
-          ))}
-        </group>
       </group>
 
       {/* paused: one steady dot */}
@@ -547,5 +462,5 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
 }
 
 function cloneLook(l: Look): Look {
-  return { ...l, core: l.core.clone(), swirl: l.swirl.clone(), rim: l.rim.clone(), halo: l.halo.clone(), eye: l.eye.clone() };
+  return { ...l, core: l.core.clone(), swirl: l.swirl.clone(), rim: l.rim.clone(), halo: l.halo.clone() };
 }

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JAS film</title>
+    <!-- Source of the 20-second JAS film. ?capture renders one frame per call to window.__render(t)
+         (used by scripts/render-film.mjs); without it the film plays live in the browser. -->
+  </head>
+  <body>
+    <div id="stage"></div>
+    <script type="module" src="./film.ts"></script>
+  </body>
+</html>

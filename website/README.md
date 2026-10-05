@@ -24,7 +24,7 @@ npm run preview    # serve dist/
 
 ```bash
 npx playwright install chromium   # once, or set CHROMIUM_PATH to an existing Chromium
-npm test                          # 11 tests x desktop + phone
+npm test                          # 12 tests x desktop + phone
 ```
 
 Covers: no console errors, no third-party requests, every section present, no sideways scroll,
@@ -43,6 +43,20 @@ Pause motion, reduced motion (content visible, core static), axe scan with no se
 | `src/ui/useTilt.ts` | 3D tilt + gold sheen for any element with `data-tilt`. |
 | `src/demo/` | The scripted, simulated demo commands. |
 | `public/lock/` | Lock-screen faces rendered by the real `app/lockart.py`. |
+
+## The film
+
+`film/` is the source of the 20-second ad (HR needs an urgent report sent; JAS does it from her phone
+in seconds). Every frame is a pure function of time, so it renders frame by frame into a smooth video:
+
+```bash
+npx vite --port 5173 &                       # serves film/ at /film/
+CHROMIUM_PATH=/path/to/chromium node scripts/render-film.mjs   # writes public/film/jas-film.mp4 + poster
+```
+
+Open http://localhost:5173/film/ to watch it play live. Encoding needs an ffmpeg with libx264
+(`FFMPEG=/path/to/ffmpeg`, or `pip install imageio-ffmpeg`). The storyboard and brand tokens are also
+in Figma: https://www.figma.com/design/b2tEZDVLI0SlNS5nHeAzMj
 
 ## Adding Higgsfield footage
 

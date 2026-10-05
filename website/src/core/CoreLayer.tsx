@@ -26,13 +26,13 @@ function CameraRig() {
 /** Target placement for each anchor, in world units relative to the visible viewport. */
 function placement(anchor: Exclude<Anchor, "hidden">, w: number, h: number, narrow: boolean) {
   if (narrow) {
-    if (anchor === "hero") return { x: 0, y: h * 0.28, s: 0.74 };
+    if (anchor === "hero") return { x: 0, y: -h * 0.01, s: 1.0 };
     if (anchor === "center") return { x: 0, y: 0, s: 0.85 };
     return { x: 0, y: h * 0.3, s: 0.55 };
   }
   switch (anchor) {
     case "hero":
-      return { x: w * 0.24, y: 0, s: 0.95 };
+      return { x: 0, y: -h * 0.16, s: 0.62 };
     case "center":
       return { x: 0, y: -h * 0.02, s: 0.72 };
     case "left":

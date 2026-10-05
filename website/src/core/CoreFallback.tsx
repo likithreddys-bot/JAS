@@ -1,14 +1,12 @@
 import { GLASS, LOOKS, type CoreState } from "./states";
 import type { Anchor } from "../story/director";
 
-/** 2D core for devices without WebGL or that can't hold frame rate. Same colours, same round eyes. */
+/** 2D core for devices without WebGL or that can't hold frame rate. Same colours, same glowing orb. */
 export function CoreFallback({ state, anchor, narrow }: { state: CoreState; anchor: Anchor; narrow: boolean }) {
   const look = LOOKS[state];
   const hex = (c: { getHexString(): string }) => `#${c.getHexString()}`;
-  const open = Math.max(0.08, Math.min(1.1, look.open));
-  const r = 19 * look.eyeSize;
-  const x = narrow || anchor === "center" ? "50%" : anchor === "left" || anchor === "how" ? "24%" : "70%";
-  const y = narrow && anchor !== "center" ? "28%" : "50%";
+  const x = narrow || anchor === "center" || anchor === "hero" ? "50%" : anchor === "left" || anchor === "how" ? "24%" : "70%";
+  const y = anchor === "hero" ? "58%" : narrow && anchor !== "center" ? "28%" : "50%";
   return (
     <div className="absolute inset-0">
       <svg
@@ -18,39 +16,21 @@ export function CoreFallback({ state, anchor, narrow }: { state: CoreState; anch
       >
         <defs>
           <radialGradient id="fb-halo">
-            <stop offset="45%" stopColor={hex(look.halo)} stopOpacity={look.haloI * 0.8} />
+            <stop offset="45%" stopColor={hex(look.halo)} stopOpacity={Math.min(1, look.haloI)} />
             <stop offset="100%" stopColor={hex(look.halo)} stopOpacity="0" />
           </radialGradient>
-          <radialGradient id="fb-body" cx="50%" cy="50%">
+          <radialGradient id="fb-body" cx="45%" cy="42%">
             <stop offset="0%" stopColor={hex(look.core)} />
             <stop offset="55%" stopColor={hex(look.swirl)} />
             <stop offset="100%" stopColor={hex(GLASS)} />
           </radialGradient>
-          <filter id="fb-eyeglow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="3" result="b" />
-            <feMerge>
-              <feMergeNode in="b" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
         </defs>
         <circle r="200" fill="url(#fb-halo)" />
-        <circle r="100" fill="url(#fb-body)" stroke={hex(look.rim)} strokeOpacity="0.5" strokeWidth="2" />
-        {[-1, 1].map((side) =>
-          look.smile > 0.5 ? (
-            <path
-              key={side}
-              d={`M ${side * 31 - r} 2 A ${r} ${r} 0 0 1 ${side * 31 + r} 2`}
-              fill="none"
-              stroke={hex(look.eye)}
-              strokeWidth="6"
-              strokeLinecap="round"
-              filter="url(#fb-eyeglow)"
-            />
-          ) : (
-            <ellipse key={side} cx={side * 31} cy="-4" rx={r} ry={r * open} fill={hex(look.eye)} filter="url(#fb-eyeglow)" />
-          ),
-        )}
+        <circle r="100" fill="url(#fb-body)" stroke={hex(look.rim)} strokeOpacity="0.6" strokeWidth="2" />
+        <ellipse cx="-34" cy="-46" rx="16" ry="9" fill="#F7F1E6" opacity="0.5" transform="rotate(-30 -34 -46)" />
+        {[140, 165].map((r) => (
+          <ellipse key={r} rx={r} ry={r * 0.32} fill="none" stroke={hex(look.rim)} strokeOpacity={look.waves * 0.5} strokeWidth="1.5" transform="rotate(-18)" />
+        ))}
       </svg>
     </div>
   );

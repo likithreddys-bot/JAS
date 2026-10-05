@@ -11,6 +11,7 @@ export const CONTACT = {
 export const HERO_LOOP_SRC: string | null = null;
 
 export const NAV = [
+  { href: "#film", label: "The film" },
   { href: "#not-siri", label: "Why JAS" },
   { href: "#problem", label: "The problem" },
   { href: "#demo", label: "Try it" },
@@ -21,6 +22,7 @@ export const NAV = [
 
 export const HERO = {
   eyebrow: "Your personal AI operator",
+  // Title shows [0] and [2]: "Your laptop." / "From anywhere." The middle line stays for the OG/meta copy.
   title: ["Your laptop.", "By voice.", "From anywhere."],
   body:
     "JAS runs on your own Windows PC. Speak to your phone, and the real work happens on your laptop — opening files, driving Excel, sending email, sharing documents. Nothing consequential happens until you say yes.",
@@ -193,3 +195,20 @@ export const ROAST = {
   disclosure:
     "Full disclosure: JAS may rent a cloud brain — Gemini or Claude — to pick which tool to use. It gets the text of your command. Never your audio, never the keyboard. The brain can be rented. The hands are JAS's.",
 };
+
+/** The film: a 20-second spot. HR needs a report sent to her manager now; her laptop is far away. */
+export const FILM = {
+  src: "film/jas-film.mp4",
+  poster: "film/jas-film-poster.jpg",
+  title: "Thirty seconds.",
+  caption: "A dramatised scenario. JAS really does send email from your own PC, and asks before it sends.",
+};
+
+export const HIGHLIGHTS = [
+  { big: "11×", label: "faster speech recognition on the laptop's own GPU", note: "41 s → 3.6 s, same clip, under load" },
+  { big: "0", label: "ports opened on your router", note: "Away from home it rides a private Tailscale tunnel" },
+  { big: "1 yes", label: "before anything is sent, shared or remembered", note: "Enforced by the code that runs tools" },
+  { big: "6 digits", label: "of PIN on every phone request", note: "Five wrong guesses locks that source out" },
+  { big: "Locked", label: "screen? JAS keeps working", note: "And the lock screen's face really blinks" },
+  { big: "0 s", label: "of microphone audio sent to the cloud", note: "Wake word and speech run on your PC" },
+];

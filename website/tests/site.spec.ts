@@ -133,3 +133,15 @@ test("no serious or critical accessibility violations", async ({ page }) => {
   const bad = results.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
   expect(bad.map((v) => `${v.id}: ${v.nodes.length} × ${v.nodes[0]?.target}`)).toEqual([]);
 });
+
+test("the film is on the page and its video file is served", async ({ page, request }) => {
+  await page.goto("/");
+  const film = page.getByTestId("film");
+  await expect(film).toBeAttached();
+  const src = await film.getAttribute("src");
+  expect(src).toMatch(/film\/jas-film\.mp4$/);
+  const res = await request.get(new URL(src!, page.url()).toString());
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).toContain("video/mp4");
+  expect((await res.body()).length).toBeGreaterThan(100_000);
+});

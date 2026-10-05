@@ -4,7 +4,7 @@ import { director } from "../story/director";
 import { Eyebrow, H2, Section } from "./Section";
 
 const HOW: Record<CoreState, string> = {
-  standby: "Breathes slowly, eyes half-open, blinks every few seconds.",
+  standby: "Breathes slowly; soft rings of light revolve around it.",
   listening: "Brightens; a ring pulses with your voice.",
   thinking: "Dims slightly; particles orbit while it decides.",
   executing: "Warms to green-gold; a steady arc tracks the work.",

@@ -5,6 +5,8 @@ import { Nav } from "./sections/Nav";
 import { Hero } from "./sections/Hero";
 import { Thesis } from "./sections/Thesis";
 import { Roast } from "./sections/Roast";
+import { Film } from "./sections/Film";
+import { Highlights } from "./sections/Highlights";
 import { Problem } from "./sections/Problem";
 import { Demo } from "./sections/Demo";
 import { HowItWorks } from "./sections/HowItWorks";
@@ -74,12 +76,14 @@ export default function App() {
       <Nav />
       <main className="relative z-10">
         <Hero />
+        <Film />
         <Thesis />
         <Roast />
         <Problem />
         <Demo />
         <HowItWorks />
         <Examples />
+        <Highlights />
         <Capabilities />
         <Trust />
         <Honest />
