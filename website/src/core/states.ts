@@ -14,23 +14,28 @@ const T = {
 };
 export const TOKENS = T;
 
-/** Blend two token colours. Every colour in the core is a mix of spec tokens. */
+/** Blend two token colours. Every colour in the core is a mix of the tokens. */
 const mix = (a: Color, b: Color, t: number) => a.clone().lerp(b, t);
+
+/** Smoked glass the sphere is made of: near-black with a warm cast. */
+export const GLASS = mix(T.bg, T.sun, 0.07);
 
 export interface Look {
   // colours
-  body: Color; // lit centre of the sphere
-  edge: Color; // sphere edge
-  rim: Color; // fresnel glow
-  halo: Color;
-  // intensities
+  core: Color; // bright heart of the light inside the glass
+  swirl: Color; // darker, slower light that swirls around the heart
+  rim: Color; // light caught at the edge of the glass
+  halo: Color; // glow around the sphere
+  eye: Color; // the two eyes
+  // light
   haloI: number;
   rimI: number;
-  // face
+  glow: number; // how much the interior light fills the glass
+  // face: two round glowing eyes, no pupils. Expression comes from their shape.
   open: number; // eye openness, 1 = fully open
-  pupil: number; // pupil scale
-  browLift: number;
-  browTilt: number; // radians; > 0 knits (angry), < 0 raises the inner ends (concerned)
+  eyeSize: number;
+  lidTilt: number; // > 0 lids slope down toward the nose (cross), < 0 up (worried)
+  smile: number; // 0 = round eyes, 1 = happy arcs
   lookX: number; // where the eyes look when not following the pointer, -1..1
   lookY: number;
   follow: number; // 0..1 how much the eyes follow the pointer
@@ -39,28 +44,29 @@ export interface Look {
   breathPeriod: number;
   pulseAmp: number; // extra pulse for confirming / responding
   pulsePeriod: number;
+  // the rings of light that revolve around the core
+  waves: number; // opacity
+  waveAmp: number; // how far the rings ripple
+  waveSpeed: number;
   // overlays
-  ring: number; // listening ring opacity
   orbit: number; // thinking particles opacity
   arc: number; // executing arc opacity
   dot: number; // paused dot opacity
-  gyro: number; // calm gold gyroscope rings (standby / responding)
 }
 
-const creamHi = mix(T.ink, T.sun, 0.3);
-const creamEdge = mix(T.ink, T.sun, 0.68);
-
 const base: Look = {
-  body: creamHi,
-  edge: creamEdge,
+  core: T.sun,
+  swirl: mix(T.sun, T.alert, 0.2),
   rim: T.sun,
   halo: T.sun,
-  haloI: 0.55,
-  rimI: 0.8,
-  open: 0.55,
-  pupil: 1,
-  browLift: 0,
-  browTilt: 0,
+  eye: mix(T.ink, T.sun, 0.25),
+  haloI: 0.45,
+  rimI: 0.9,
+  glow: 1.15,
+  open: 0.72,
+  eyeSize: 1,
+  lidTilt: 0,
+  smile: 0,
   lookX: 0,
   lookY: 0,
   follow: 1,
@@ -68,130 +74,154 @@ const base: Look = {
   breathPeriod: 4,
   pulseAmp: 0,
   pulsePeriod: 3,
-  ring: 0,
+  waves: 0.75,
+  waveAmp: 0.035,
+  waveSpeed: 0.35,
   orbit: 0,
   arc: 0,
   dot: 0,
-  gyro: 0,
 };
 
 const L = (o: Partial<Look>): Look => ({ ...base, ...o });
 
 /** One look per state. Each must be recognisable without reading any text (spec §13). */
 export const LOOKS: Record<CoreState, Look> = {
-  // breathing, half-open eyes, blinking
-  standby: L({ gyro: 1 }),
-  // brighter, wide attentive eyes, audio-reactive ring
+  // calm light, soft half-open eyes, slow ripples, blinking
+  standby: L({}),
+  // brighter, eyes wide, the rings ripple with your voice
   listening: L({
-    body: mix(T.ink, T.sun, 0.16),
-    edge: mix(T.ink, T.sun, 0.5),
-    haloI: 1.0,
+    core: mix(T.sun, T.ink, 0.35),
+    haloI: 0.9,
     rimI: 1.2,
-    open: 1.1,
-    pupil: 1.3,
-    browLift: 0.05,
+    glow: 1.3,
+    open: 1.05,
+    eyeSize: 1.12,
+    eye: mix(T.ink, T.sun, 0.08),
     breathAmp: 0.012,
-    ring: 1,
+    waves: 1,
+    waveAmp: 0.075,
+    waveSpeed: 1.0,
   }),
-  // dimmer, eyes up and away, brows knit, particles orbit
+  // light dims, eyes look up and away, particles orbit
   thinking: L({
-    body: mix(creamHi, T.bg, 0.16),
-    edge: mix(creamEdge, T.bg, 0.22),
-    haloI: 0.32,
-    rimI: 0.55,
-    open: 0.8,
-    pupil: 0.85,
-    browTilt: 0.14,
-    browLift: 0.02,
-    lookX: 0.7,
-    lookY: 0.75,
+    core: mix(T.sun, T.bg, 0.2),
+    haloI: 0.3,
+    rimI: 0.7,
+    glow: 0.6,
+    open: 0.82,
+    eyeSize: 0.9,
+    lidTilt: 0.1,
+    lookX: 0.6,
+    lookY: 0.65,
     follow: 0,
     breathAmp: 0.012,
     breathPeriod: 2.4,
+    waves: 0.4,
+    waveSpeed: 0.7,
     orbit: 1,
   }),
-  // soft green-gold, eyes toward the checklist, steady scanning arc
+  // green-gold, eyes toward the checklist, a steady arc tracks the work
   executing: L({
-    body: mix(T.ink, T.earth, 0.14),
-    edge: mix(T.sun, T.earth, 0.35),
-    rim: T.earth,
+    core: mix(T.earth, T.sun, 0.4),
+    swirl: mix(T.earth, T.bg, 0.3),
+    rim: mix(T.earth, T.sun, 0.3),
     halo: mix(T.earth, T.sun, 0.45),
-    haloI: 0.65,
-    rimI: 1.0,
-    open: 0.85,
+    haloI: 0.6,
+    open: 0.88,
     lookX: 0.65,
     lookY: -0.05,
     follow: 0.15,
     breathAmp: 0.01,
+    waves: 0.5,
+    waveSpeed: 0.9,
     arc: 1,
   }),
-  // deeper amber, eyes on the question, slow pulse
+  // deeper amber, worried lids, eyes on the question, slow pulse
   confirming: L({
-    body: mix(T.sun, T.ink, 0.2),
-    edge: mix(T.sun, T.alert, 0.32),
-    rim: mix(T.sun, T.alert, 0.2),
+    core: mix(T.sun, T.alert, 0.25),
+    swirl: mix(T.alert, T.bg, 0.2),
+    rim: mix(T.sun, T.alert, 0.25),
     halo: mix(T.sun, T.alert, 0.2),
-    haloI: 0.85,
-    rimI: 1.0,
-    open: 1.0,
-    browTilt: -0.18,
-    browLift: 0.04,
+    haloI: 0.8,
+    rimI: 1.1,
+    glow: 1.05,
+    open: 1,
+    lidTilt: -0.22,
     lookX: 0.6,
     lookY: -0.45,
     follow: 0,
     breathAmp: 0,
     pulseAmp: 0.05,
     pulsePeriod: 2.8,
+    waves: 0.7,
+    waveAmp: 0.04,
+    waveSpeed: 0.5,
   }),
-  // pulses with the voice output
+  // light and rings pulse with its own voice
   responding: L({
-    gyro: 0.6,
-    haloI: 0.8,
-    rimI: 1.0,
-    open: 0.9,
+    haloI: 0.75,
+    glow: 1.1,
+    open: 0.92,
+    eyeSize: 1.05,
     follow: 0.5,
     breathAmp: 0.01,
     pulseAmp: 1,
+    waves: 1,
+    waveAmp: 0.06,
+    waveSpeed: 0.9,
   }),
-  // green-gold, eyes softly closed, one ring (see JasCore: returns to standby after 1.6 s)
+  // green-gold, happy eyes, one clean ring (JasCore returns to standby after 1.6 s)
   success: L({
-    body: mix(T.ink, T.sun, 0.22),
-    edge: mix(T.sun, T.earth, 0.5),
+    core: mix(T.sun, T.earth, 0.55),
+    swirl: mix(T.earth, T.bg, 0.25),
     rim: T.earth,
     halo: mix(T.earth, T.sun, 0.4),
+    eye: mix(T.ink, T.earth, 0.15),
     haloI: 0.95,
-    rimI: 1.1,
-    open: 0.1,
+    rimI: 1.2,
+    glow: 1.15,
+    open: 1,
+    smile: 1,
     follow: 0,
     breathAmp: 0.015,
+    waves: 0.8,
   }),
-  // red, brows knit and dropped
+  // ember red, cross lids, rings ripple hard
   error: L({
-    body: mix(T.ink, T.alert, 0.36),
-    edge: T.alert,
+    core: T.alert,
+    swirl: mix(T.alert, T.bg, 0.45),
     rim: T.alert,
     halo: T.alert,
-    haloI: 0.85,
-    rimI: 1.1,
-    open: 0.75,
-    pupil: 0.8,
-    browTilt: 0.42,
-    browLift: -0.04,
+    eye: mix(T.ink, T.alert, 0.25),
+    haloI: 0.8,
+    rimI: 1.2,
+    glow: 1.0,
+    open: 0.9,
+    eyeSize: 0.92,
+    lidTilt: 0.45,
     follow: 0.2,
     breathAmp: 0.006,
     breathPeriod: 3,
+    waves: 0.65,
+    waveAmp: 0.055,
+    waveSpeed: 1.5,
   }),
-  // desaturated, motion stops, one steady dot
+  // light almost out, eyes closed, rings still, one steady dot
   paused: L({
-    body: mix(T.muted, T.ink, 0.28),
-    edge: T.muted,
+    core: T.muted,
+    swirl: mix(T.muted, T.bg, 0.6),
     rim: T.muted,
     halo: T.muted,
-    haloI: 0.14,
-    rimI: 0.3,
+    eye: mix(T.muted, T.ink, 0.3),
+    haloI: 0.12,
+    rimI: 0.45,
+    glow: 0.35,
     open: 0.06,
     follow: 0,
     breathAmp: 0,
+    waves: 0.15,
+    waveAmp: 0,
+    waveSpeed: 0,
     dot: 1,
   }),
 };

@@ -104,6 +104,8 @@ export default function CoreLayer() {
   const reduced = reducedPref || d.paused;
   const narrow = useNarrow();
   const [dpr, setDpr] = useState(1.75);
+  // ?force3d keeps the 3D core even on a slow device (for screenshots on machines without a GPU).
+  const force3d = new URLSearchParams(location.search).has("force3d");
   const [fallback, setFallback] = useState(() => !hasWebGL());
 
   // On phones there is no side column: the core steps out of side-anchored sections
@@ -138,7 +140,7 @@ export default function CoreLayer() {
             bounds={() => [40, 70]}
             flipflops={3}
             onDecline={() => setDpr(1)}
-            onFallback={() => setFallback(true)}
+            onFallback={() => !force3d && setFallback(true)}
           />
           <CameraRig />
           <GoldDust reduced={reduced} dim={narrow ? 0.6 : 1} />

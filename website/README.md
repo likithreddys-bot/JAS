@@ -17,7 +17,8 @@ npm run build      # typecheck + production build into dist/
 npm run preview    # serve dist/
 ```
 
-`?dev` in the URL shows an fps meter.
+`?dev` in the URL shows an fps meter. `?force3d` keeps the 3D core even when the device is too slow
+(the site normally switches to a 2D core then); use it for screenshots on machines without a GPU.
 
 ## Test
 
