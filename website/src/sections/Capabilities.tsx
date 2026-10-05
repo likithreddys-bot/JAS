@@ -46,7 +46,7 @@ function LockScreen() {
         {(["watchful", "blink", "angry"] as Mood[]).map((m) => (
           <img
             key={m}
-            src={`/lock/${m}.webp`}
+            src={`${import.meta.env.BASE_URL}lock/${m}.webp`}
             alt={m === "watchful" ? "JAS lock-screen face, watching" : ""}
             aria-hidden={m !== "watchful"}
             width={720}
