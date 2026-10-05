@@ -200,9 +200,12 @@ interface JasCoreProps {
   /** Optional live voice level 0..1. Falls back to a simulated level. */
   levelRef?: RefObject<number>;
   reduced?: boolean;
+  /** Optional fixed clock in seconds. When set, time comes from here (not the wall clock), so frames
+   *  can be rendered deterministically for exported stills and loops (see studio/). */
+  clockRef?: RefObject<number>;
 }
 
-export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
+export function JasCore({ state, levelRef, reduced = false, clockRef }: JasCoreProps) {
   const invalidate = useThree((s) => s.invalidate);
 
   // --- materials (created once, uniforms mutated per frame) ---
@@ -301,9 +304,11 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
 
   useFrame((frame, dtRaw) => {
     const a = anim.current;
-    const dt = Math.min(dtRaw, 0.05);
-    const now = frame.clock.elapsedTime;
-    if (!reduced) a.time += dt;
+    const fixed = clockRef?.current;
+    const dt = fixed !== undefined ? 1 / 30 : Math.min(dtRaw, 0.05);
+    const now = fixed ?? frame.clock.elapsedTime;
+    if (fixed !== undefined) a.time = fixed;
+    else if (!reduced) a.time += dt;
     const t = a.time;
 
     if (a.prevState !== state) {
