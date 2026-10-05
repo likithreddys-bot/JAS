@@ -93,7 +93,7 @@ export default function App() {
         <CoreLayer />
       </Suspense>
       <p className="sr-only" aria-live="polite">
-        JAS core: {STATE_LABEL[effectiveState(d)]}
+        Luffy: {STATE_LABEL[effectiveState(d)]}
       </p>
       <Nav />
       <main className="relative z-10">

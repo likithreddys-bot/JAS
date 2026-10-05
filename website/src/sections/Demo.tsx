@@ -40,7 +40,7 @@ export function Demo() {
         <Eyebrow>Try it</Eyebrow>
         <H2>Say it once. Watch it happen.</H2>
         <p data-reveal className="mt-6 text-lg text-ink/70">
-          Pick a command. JAS hears it, decides, works through the steps — and stops to ask before anything consequential.
+          Pick a command. Luffy hears it, decides, works through the steps — and stops to ask before anything consequential.
         </p>
 
         <div data-reveal className="mt-8 flex flex-wrap gap-2" role="group" aria-label="Demo commands">
@@ -50,7 +50,7 @@ export function Demo() {
               onClick={() => start(s)}
               disabled={busy}
               data-testid={`demo-${s.id}`}
-              className="px-4 py-2.5 rounded-full border border-white/12 text-sm text-ink hover:border-sun/60 hover:text-sun disabled:opacity-40 disabled:hover:border-white/12 disabled:hover:text-ink transition-colors"
+              className="px-4 py-2.5 rounded-full border border-ink/12 text-sm text-ink hover:border-sun/60 hover:text-sun disabled:opacity-40 disabled:hover:border-ink/12 disabled:hover:text-ink transition-colors"
             >
               {s.label}
             </button>
@@ -62,11 +62,11 @@ export function Demo() {
             <span className="flex items-center gap-2">
               <span
                 aria-hidden
-                className={`size-2 rounded-full ${view.phase === "listening" ? "bg-alert animate-pulse" : "bg-white/20"}`}
+                className={`size-2 rounded-full ${view.phase === "listening" ? "bg-alert animate-pulse" : "bg-ink/20"}`}
               />
               {view.phase === "listening" ? "Mic on (simulated)" : "Mic off"}
             </span>
-            <span className="rounded-full border border-white/10 px-2.5 py-0.5">Simulated demo · no mic · nothing is sent</span>
+            <span className="rounded-full border border-ink/10 px-2.5 py-0.5">Simulated demo · no mic · nothing is sent</span>
           </div>
 
           <p aria-live="polite" className="sr-only">
@@ -139,5 +139,5 @@ function StepIcon({ status }: { status: "pending" | "active" | "done" }) {
     );
   if (status === "active")
     return <span aria-label="in progress" className="size-5 rounded-full border-2 border-sun/80 animate-pulse" />;
-  return <span aria-label="pending" className="size-5 rounded-full border border-white/20" />;
+  return <span aria-label="pending" className="size-5 rounded-full border border-ink/20" />;
 }

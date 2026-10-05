@@ -1,4 +1,4 @@
-/* All site copy lives here. Every claim is taken from the JAS client documentation
+/* All site copy lives here. Every claim is taken from the client documentation (written when it was called JAS)
  * (JAS-Full-Documentation.pdf, 03 Oct 2026). Do not add capabilities that are not in it. */
 
 export const CONTACT = {
@@ -12,7 +12,7 @@ export const HERO_LOOP_SRC: string | null = null;
 
 export const NAV = [
   { href: "#film", label: "The film" },
-  { href: "#not-siri", label: "Why JAS" },
+  { href: "#not-siri", label: "Why Luffy" },
   { href: "#problem", label: "The problem" },
   { href: "#demo", label: "Try it" },
   { href: "#how", label: "How it works" },
@@ -26,7 +26,7 @@ export const HERO = {
   // Title shows [0] and [2]: "Your laptop." / "From anywhere." The middle line stays for the OG/meta copy.
   title: ["Your laptop.", "By voice.", "From anywhere."],
   body:
-    "JAS runs on your own Windows PC. Speak to your phone, and the real work happens on your laptop — opening files, driving Excel, sending email, sharing documents. Nothing consequential happens until you say yes.",
+    "Luffy runs on your own Windows PC. Speak to your phone, and the real work happens on your laptop — opening files, driving Excel, sending email, sharing documents. Nothing consequential happens until you say yes.",
   chips: ["Wake word runs on your PC", "Asks before it acts", "Works through a locked screen"],
 };
 
@@ -97,10 +97,10 @@ export const SCENARIOS: Scenario[] = [
 export const FLOW = [
   {
     title: "You speak",
-    body: "From your phone or the laptop's own mic. Say “JAS” first — it only acts on what is addressed to it.",
+    body: "From your phone or the laptop's own mic. Say its name first — it only acts on what is addressed to it.",
   },
   {
-    title: "JAS listens locally",
+    title: "Luffy listens locally",
     body: "Wake-word detection and speech recognition run on the laptop itself. Audio is never sent to a cloud service.",
   },
   {
@@ -108,12 +108,12 @@ export const FLOW = [
     body: "A language model receives only the text, and may only choose from a fixed list of reviewed tools. No raw shell, ever.",
   },
   {
-    title: "JAS asks to confirm",
+    title: "Luffy asks to confirm",
     body: "Anything that sends, shares, deletes, schedules or remembers is checked with you out loud — enforced in code, not in a prompt.",
   },
   {
     title: "The action runs on your PC",
-    body: "The real app does the real work. JAS reports success only when the action actually succeeded.",
+    body: "The real app does the real work. Luffy reports success only when the action actually succeeded.",
   },
 ];
 
@@ -135,7 +135,7 @@ export const CAPABILITIES = [
   { title: "A native Android app", body: "Floats over other apps and listens continuously. No hold-to-talk button." },
   { title: "Hands-free PC control", body: "Open and close apps, drive Excel — formulas, pivot tables, formatting, charts — browse, manage windows." },
   { title: "Google, built in", body: "Read and send email, read the calendar, schedule meetings, share a Drive file with someone by name." },
-  { title: "Present while locked", body: "Keeps working behind Windows' lock screen — and the orb on the lock screen visibly moves." },
+  { title: "Present while locked", body: "Keeps working behind Windows' lock screen — and the circle on the lock screen visibly moves." },
   { title: "Reachable from anywhere", body: "Home Wi-Fi, or a private encrypted Tailscale tunnel when you are away." },
 ];
 
@@ -153,7 +153,7 @@ export const LIMITATIONS = [
   { what: "Single user, single device", why: "Built around one person and one laptop. Teams are a deliberate, larger future phase." },
   { what: "Uses a cloud language model to decide", why: "The text of a command goes to Google Gemini or Anthropic Claude. The audio never does." },
   { what: "Google sign-in is in “Testing” mode", why: "The app hasn't been through Google's verification yet, so each account must be an approved tester." },
-  { what: "Speech can mishear in a noisy room", why: "JAS only acts when addressed by name, but accuracy still depends on noise and accent." },
+  { what: "Speech can mishear in a noisy room", why: "Luffy only acts when addressed by name, but accuracy still depends on noise and accent." },
   { what: "Local data isn't encrypted at rest", why: "Memory, notes and the PIN sit in a local database protected only by the laptop's own account and disk." },
   { what: "The NPU isn't used", why: "The speech model's export doesn't meet the NPU's fixed-shape requirement. The GPU path already delivers the gain." },
 ];
@@ -170,11 +170,11 @@ export const ROADMAP = {
 };
 
 /** The roast. "Them" lines are generic caricatures of phone assistants, not quotes from any product.
- *  Every JAS line is a capability from the client documentation. */
+ *  Every Luffy line is a capability from the client documentation. */
 export const ROAST = {
   eyebrow: "No offence",
-  title: ["Not Siri.", "Not Gemini.", "Just JAS."],
-  body: "Phone assistants are brilliant at the weather. JAS is for the work that is stuck on your laptop.",
+  title: ["Not Siri.", "Not Gemini.", "Just Luffy."],
+  body: "Phone assistants are brilliant at the weather. Luffy is for the work that is stuck on your laptop.",
   cards: [
     {
       them: "Here's what I found on the web.",
@@ -194,15 +194,15 @@ export const ROAST = {
     },
   ],
   disclosure:
-    "Full disclosure: JAS may rent a cloud brain — Gemini or Claude — to pick which tool to use. It gets the text of your command. Never your audio, never the keyboard. The brain can be rented. The hands are JAS's.",
+    "Full disclosure: Luffy may rent a cloud brain — Gemini or Claude — to pick which tool to use. It gets the text of your command. Never your audio, never the keyboard. The brain can be rented. The hands are Luffy's.",
 };
 
 /** The film: a 20-second spot. HR needs a report sent to her manager now; her laptop is far away. */
 export const FILM = {
-  src: "film/jas-film.mp4",
-  poster: "film/jas-film-poster.jpg",
+  src: "film/luffy-film.mp4",
+  poster: "film/luffy-film-poster.jpg",
   title: "Thirty seconds.",
-  caption: "A dramatised scenario. JAS really does send email from your own PC, and asks before it sends.",
+  caption: "A dramatised scenario. Luffy really does send email from your own PC, and asks before it sends.",
 };
 
 export const HIGHLIGHTS = [
@@ -210,22 +210,22 @@ export const HIGHLIGHTS = [
   { big: "0", label: "ports opened on your router", note: "Away from home it rides a private Tailscale tunnel" },
   { big: "1 yes", label: "before anything is sent, shared or remembered", note: "Enforced by the code that runs tools" },
   { big: "6 digits", label: "of PIN on every phone request", note: "Five wrong guesses locks that source out" },
-  { big: "Locked", label: "screen? JAS keeps working", note: "And the orb on the lock screen really moves" },
+  { big: "Locked", label: "screen? Luffy keeps working", note: "And the circle on the lock screen really moves" },
   { big: "0 s", label: "of microphone audio sent to the cloud", note: "Wake word and speech run on your PC" },
 ];
 
 /** Straight answers. Every one is taken from the client documentation. */
 export const FAQ = [
   {
-    q: "Does JAS listen to everything I say?",
-    a: "It listens only for its name, on your laptop itself. Nothing is sent anywhere until it hears “JAS”, and speech recognition also runs on the laptop.",
+    q: "Does Luffy listen to everything I say?",
+    a: "It listens only for its name, on your laptop itself. Nothing is sent anywhere until it hears its name, and speech recognition also runs on the laptop.",
   },
   {
     q: "What leaves my PC?",
     a: "Only the text of a command, sent to a language model (Google Gemini or Anthropic Claude) so it can choose which tool to use. Never your audio, and never control of your PC.",
   },
   {
-    q: "Can JAS send something without asking me?",
+    q: "Can Luffy send something without asking me?",
     a: "No. Anything that sends, shares, deletes, schedules or remembers is confirmed with you first. That rule is enforced by the code that runs the tools, not by an instruction to the AI.",
   },
   {
@@ -234,7 +234,7 @@ export const FAQ = [
   },
   {
     q: "What if my laptop is off or asleep?",
-    a: "Then JAS can't answer: nothing is running. The laptop is set never to sleep while it is plugged in.",
+    a: "Then Luffy can't answer: nothing is running. The laptop is set never to sleep while it is plugged in.",
   },
   {
     q: "Which devices does it work with?",
@@ -246,6 +246,6 @@ export const FAQ = [
   },
   {
     q: "Can my team use it?",
-    a: "Not yet. JAS is built for one person and one laptop. Team accounts are a deliberate, later phase.",
+    a: "Not yet. Luffy is built for one person and one laptop. Team accounts are a deliberate, later phase.",
   },
 ];

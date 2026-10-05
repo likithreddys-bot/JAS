@@ -13,7 +13,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "email",
     label: "Email the Q3 report",
-    words: "JAS, email the Q3 report to Rahul.",
+    words: "Luffy, email the Q3 report to Rahul.",
     steps: ["Find the file “Q3 Report.xlsx”", "Match “Rahul” to a saved contact", "Draft the email with the file attached"],
     confirm: {
       question: "Send “Q3 Report.xlsx” to Rahul Mehta (rahul@example.com)?",
@@ -25,14 +25,14 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "calendar",
     label: "What's on tomorrow?",
-    words: "JAS, what's on my calendar tomorrow?",
+    words: "Luffy, what's on my calendar tomorrow?",
     steps: ["Read tomorrow's events from Google Calendar"],
     answer: "Three things: stand-up at 9:30, lunch with Priya at 1, and the board review at 4.",
   },
   {
     id: "share",
     label: "Share the contract",
-    words: "JAS, share the contract draft with legal, view only.",
+    words: "Luffy, share the contract draft with legal, view only.",
     steps: ["Find “Contract Draft v3” in Google Drive", "Match “legal” to legal@example.com"],
     confirm: {
       question: "Share “Contract Draft v3” with legal@example.com as view only?",

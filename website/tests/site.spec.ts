@@ -20,6 +20,8 @@ test("loads with no console errors and no third-party requests", async ({ page }
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Your laptop.");
   await expect(page.getByTestId("core-layer")).toBeAttached();
+  // The same brush stroke as the real lock screen (app/lockart.py pins the same count).
+  await expect(page.getByTestId("core-layer")).toHaveAttribute("data-dabs", "11738");
   await page.waitForTimeout(1500);
   expect(w.errors).toEqual([]);
   expect(w.external).toEqual([]);
@@ -148,7 +150,7 @@ test("the film is on the page and its video file, with sound, is served", async 
   const film = page.getByTestId("film");
   await expect(film).toBeAttached();
   const src = await film.getAttribute("src");
-  expect(src).toMatch(/film\/jas-film\.mp4$/);
+  expect(src).toMatch(/film\/luffy-film\.mp4$/);
   const res = await request.get(new URL(src!, page.url()).toString());
   expect(res.status()).toBe(200);
   expect(res.headers()["content-type"]).toContain("video/mp4");
@@ -167,14 +169,14 @@ test("the FAQ opens to a straight answer", async ({ page }) => {
   await expect(items.first()).toContainText("It listens only for its name");
 });
 
-test("the lock screen shows Likki's PC with the orb drawn by the app's own code", async ({ page }) => {
+test("the lock screen shows Likki's PC with the ensō drawn by the app's own code", async ({ page }) => {
   await page.goto("/#locked");
-  const shot = page.getByAltText("Likki's PC, locked, with the JAS orb on the lock screen");
+  const shot = page.getByAltText("Likki's PC, locked, with the Luffy ensō on the lock screen");
   await shot.scrollIntoViewIfNeeded();
   // The image is lazy-loaded: wait for the real file to arrive rather than reading it mid-download.
   await expect.poll(() => shot.evaluate((img: HTMLImageElement) => img.naturalWidth), { timeout: 15_000 }).toBe(1280);
   await expect(shot).toBeVisible();
-  const caption = page.getByText("Drawn by JAS's own lock-screen code");
+  const caption = page.getByText("Drawn by the app's own lock-screen code");
   await caption.scrollIntoViewIfNeeded();
   await expect(caption).toBeVisible();
 });

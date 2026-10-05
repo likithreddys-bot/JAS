@@ -43,7 +43,7 @@ export function Thesis() {
         </p>
         <p data-reveal className="mt-10 max-w-2xl text-lg text-ink/70">
           The information and the tools you need already exist — on a machine that is reachable in principle, but not in
-          the moment. That gap is exactly what JAS closes.
+          the moment. That gap is exactly what Luffy closes.
         </p>
       </div>
     </Section>
