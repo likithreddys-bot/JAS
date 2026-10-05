@@ -107,7 +107,7 @@ const BODY_FRAG = /* glsl */ `
     col += vec3(1.0, 0.97, 0.9) * (pow(k, 120.0) * 1.1 + pow(k, 14.0) * 0.1);
     vec3 L2 = normalize(vec3(0.75, -0.4, 0.5));
     col += uRim * pow(max(dot(R, L2), 0.0), 36.0) * 0.35;
-    col += uRim * fres * uRimI * 0.85;                        // light caught at the edge
+    col += uRim * fres * uRimI * 1.1;                         // light caught at the edge
 
     gl_FragColor = vec4(col, 1.0);
     #include <colorspace_fragment>
@@ -154,7 +154,9 @@ const EYE_FRAG = /* glsl */ `
 
     float aa = 0.025;
     float body = smoothstep(aa, -aa, d);
-    float glow = exp(-max(d, 0.0) * 9.0) * 0.55;
+    float glow = exp(-max(d, 0.0) * 6.0) * 0.8;
+    // Fade the glow out before the edge of the quad, or the quad's square outline shows.
+    glow *= smoothstep(1.0, 0.7, max(abs(p.x), abs(p.y)));
     float centre = 1.0 - 0.18 * clamp(length(p) / max(r, 0.01), 0.0, 1.0);
     vec3 col = uColor * (body * centre * 1.15 + glow * 0.75);
     gl_FragColor = vec4(col, max(body, glow * 0.8));
@@ -165,7 +167,7 @@ const EYE_FRAG = /* glsl */ `
 /* A ring of light that ripples like a sound wave and revolves: the bright head leads a fading tail. */
 const WAVE_VERT = /* glsl */ `
   uniform float uTime; uniform float uAmp; uniform float uFreq; uniform float uPhase; uniform float uSpeed;
-  varying float vA;
+  varying float vA; varying float vFacing;
   void main() {
     vec3 p = position;
     float a = atan(p.y, p.x);
@@ -174,17 +176,20 @@ const WAVE_VERT = /* glsl */ `
     p.xy *= 1.0 + uAmp * w;
     p.z += uAmp * 0.7 * cos(a * (uFreq * 0.5) + uTime * uSpeed * 2.0 + uPhase);
     vA = a;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    vFacing = abs(dot(normalize(normalMatrix * normal), normalize(-mv.xyz)));
+    gl_Position = projectionMatrix * mv;
   }
 `;
 const WAVE_FRAG = /* glsl */ `
   uniform vec3 uColor; uniform float uOpacity; uniform float uTime; uniform float uRot; uniform float uPhase;
-  varying float vA;
+  uniform float uSoft; // 0 = crisp line, higher = softer glow that fades toward the tube's edges
+  varying float vA; varying float vFacing;
   void main() {
     float u = fract(vA / 6.2831853 + 0.5 - uTime * uRot + uPhase * 0.1);
     float head = pow(u, 2.6);
     float head2 = pow(fract(u + 0.5), 2.6) * 0.55;
-    float a = (0.12 + 0.88 * max(head, head2)) * uOpacity;
+    float a = (0.12 + 0.88 * max(head, head2)) * uOpacity * pow(vFacing, uSoft);
     gl_FragColor = vec4(uColor * (0.8 + 0.6 * head), a);
     #include <colorspace_fragment>
   }
@@ -222,9 +227,9 @@ const EYE_QUAD = 0.62; // world size of each eye's quad (shape + glow)
  *  Frequencies must be even so every harmonic in WAVE_VERT is a whole number: an odd or fractional
  *  one breaks the ring where the angle wraps from +pi to -pi. */
 const WAVES: [number, [number, number, number], number, number, number][] = [
-  [1.3, [1.2, 0.0, 0.35], 6, 0.0, 0.11],
-  [1.5, [0.95, 0.65, -0.5], 8, 2.1, -0.08],
-  [1.7, [1.45, -0.55, 0.9], 4, 4.2, 0.06],
+  [1.36, [1.2, 0.0, 0.35], 6, 0.0, 0.11],
+  [1.62, [0.95, 0.65, -0.5], 8, 2.1, -0.08],
+  [1.9, [1.45, -0.55, 0.9], 4, 4.2, 0.06],
 ];
 
 interface JasCoreProps {
@@ -279,8 +284,8 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
       ),
     [],
   );
-  const waveMats = useMemo(
-    () =>
+  // Each ring is drawn twice: a crisp line, and a wide soft tube around it that reads as glow.
+  const makeWaveMats = (soft: number) =>
       WAVES.map(
         ([, , freq, phase, rot]) =>
           new ShaderMaterial({
@@ -289,14 +294,15 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
             uniforms: {
               uTime: { value: 0 }, uAmp: { value: 0 }, uFreq: { value: freq }, uPhase: { value: phase },
               uSpeed: { value: 0 }, uColor: { value: new Color() }, uOpacity: { value: 0 }, uRot: { value: rot },
+              uSoft: { value: soft },
             },
             transparent: true,
             depthWrite: false,
             blending: AdditiveBlending,
           }),
-      ),
-    [],
-  );
+      );
+  const waveMats = useMemo(() => makeWaveMats(0.3), []);
+  const bloomMats = useMemo(() => makeWaveMats(2.2), []);
   const orbitGeo = useMemo(() => {
     const n = 140;
     const g = new Float32Array(n * 3);
@@ -392,9 +398,9 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
     bu.uTime.value = t;
     bu.uPulse.value = voice * 0.35 + confirmPulse * 0.12;
     halo.uniforms.uColor.value.copy(c.halo);
-    halo.uniforms.uI.value = c.haloI * (1 + voice * 0.45 + confirmPulse * 0.25);
+    halo.uniforms.uI.value = c.haloI * (1.25 + voice * 0.55 + confirmPulse * 0.3);
     pool.uniforms.uColor.value.copy(c.halo);
-    pool.uniforms.uI.value = c.haloI * 0.32;
+    pool.uniforms.uI.value = c.haloI * 0.5;
 
     // --- gaze: the face turns toward the pointer, blended with the state's own direction ---
     const follow = reduced ? 0 : c.follow;
@@ -422,14 +428,17 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
     }
 
     // --- revolving wave rings ---
-    const amp = c.waveAmp * (1 + voice * 2.2);
+    const amp = c.waveAmp * (1 + voice * 2.4);
     for (let i = 0; i < waveMats.length; i++) {
-      const u = waveMats[i].uniforms;
-      u.uTime.value = t;
-      u.uAmp.value = amp;
-      u.uSpeed.value = c.waveSpeed;
-      u.uOpacity.value = c.waves * (0.55 + voice * 0.45) * (i === 0 ? 1 : 0.8);
-      u.uColor.value.copy(c.rim);
+      const opacity = c.waves * (0.8 + voice * 0.4) * (i === 0 ? 1 : 0.85);
+      for (const [mats, mul] of [[waveMats, 1], [bloomMats, 0.32]] as const) {
+        const u = mats[i].uniforms;
+        u.uTime.value = t;
+        u.uAmp.value = amp;
+        u.uSpeed.value = c.waveSpeed;
+        u.uOpacity.value = opacity * mul;
+        u.uColor.value.copy(c.rim);
+      }
     }
     if (waveGroup.current) waveGroup.current.rotation.y = reduced ? 0 : t * 0.05;
 
@@ -465,7 +474,7 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
   return (
     <group>
       <mesh position={[0, 0, -0.8]} renderOrder={-2} material={halo}>
-        <planeGeometry args={[4, 4]} />
+        <planeGeometry args={[5.4, 5.4]} />
       </mesh>
       {/* a pool of light beneath the core grounds it in space */}
       <mesh position={[0, -1.42, -0.4]} scale={[2.8, 0.42, 1]} renderOrder={-1} material={pool}>
@@ -475,9 +484,14 @@ export function JasCore({ state, levelRef, reduced = false }: JasCoreProps) {
       {/* revolving wave rings; depth-tested so the far side passes behind the glass */}
       <group ref={waveGroup}>
         {WAVES.map(([radius, tilt], i) => (
-          <mesh key={i} scale={radius} rotation={tilt} material={waveMats[i]} renderOrder={5}>
-            <torusGeometry args={[1, 0.008, 6, 320]} />
-          </mesh>
+          <group key={i} scale={radius} rotation={tilt}>
+            <mesh material={waveMats[i]} renderOrder={5}>
+              <torusGeometry args={[1, 0.009, 6, 320]} />
+            </mesh>
+            <mesh material={bloomMats[i]} renderOrder={4}>
+              <torusGeometry args={[1, 0.06, 10, 320]} />
+            </mesh>
+          </group>
         ))}
       </group>
 

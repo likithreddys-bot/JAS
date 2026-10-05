@@ -60,7 +60,7 @@ const base: Look = {
   rim: T.sun,
   halo: T.sun,
   eye: mix(T.ink, T.sun, 0.25),
-  haloI: 0.45,
+  haloI: 0.6,
   rimI: 0.9,
   glow: 1.15,
   open: 0.72,
@@ -75,7 +75,7 @@ const base: Look = {
   pulseAmp: 0,
   pulsePeriod: 3,
   waves: 0.75,
-  waveAmp: 0.035,
+  waveAmp: 0.07,
   waveSpeed: 0.35,
   orbit: 0,
   arc: 0,
@@ -91,7 +91,7 @@ export const LOOKS: Record<CoreState, Look> = {
   // brighter, eyes wide, the rings ripple with your voice
   listening: L({
     core: mix(T.sun, T.ink, 0.35),
-    haloI: 0.9,
+    haloI: 1.1,
     rimI: 1.2,
     glow: 1.3,
     open: 1.05,
@@ -99,7 +99,7 @@ export const LOOKS: Record<CoreState, Look> = {
     eye: mix(T.ink, T.sun, 0.08),
     breathAmp: 0.012,
     waves: 1,
-    waveAmp: 0.075,
+    waveAmp: 0.13,
     waveSpeed: 1.0,
   }),
   // light dims, eyes look up and away, particles orbit
@@ -154,7 +154,7 @@ export const LOOKS: Record<CoreState, Look> = {
     pulseAmp: 0.05,
     pulsePeriod: 2.8,
     waves: 0.7,
-    waveAmp: 0.04,
+    waveAmp: 0.075,
     waveSpeed: 0.5,
   }),
   // light and rings pulse with its own voice
@@ -167,7 +167,7 @@ export const LOOKS: Record<CoreState, Look> = {
     breathAmp: 0.01,
     pulseAmp: 1,
     waves: 1,
-    waveAmp: 0.06,
+    waveAmp: 0.11,
     waveSpeed: 0.9,
   }),
   // green-gold, happy eyes, one clean ring (JasCore returns to standby after 1.6 s)
@@ -203,7 +203,7 @@ export const LOOKS: Record<CoreState, Look> = {
     breathAmp: 0.006,
     breathPeriod: 3,
     waves: 0.65,
-    waveAmp: 0.055,
+    waveAmp: 0.1,
     waveSpeed: 1.5,
   }),
   // light almost out, eyes closed, rings still, one steady dot
