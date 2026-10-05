@@ -54,7 +54,10 @@ npx vite --port 5173 &                       # serves film/ at /film/
 CHROMIUM_PATH=/path/to/chromium node scripts/render-film.mjs   # writes public/film/jas-film.mp4 + poster
 ```
 
-Open http://localhost:5173/film/ to watch it play live. Encoding needs an ffmpeg with libx264
+The score is original and synthesised from scratch by `scripts/film_music.py` (numpy; no samples,
+no licences), timed to the film's beats; the render script mixes it in.
+
+Open http://localhost:5173/film/ to watch it play live (silent; the music is added at render time). Encoding needs `pip install numpy` and an ffmpeg with libx264
 (`FFMPEG=/path/to/ffmpeg`, or `pip install imageio-ffmpeg`). The storyboard and brand tokens are also
 in Figma: https://www.figma.com/design/b2tEZDVLI0SlNS5nHeAzMj
 

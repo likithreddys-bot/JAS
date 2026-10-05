@@ -134,7 +134,7 @@ test("no serious or critical accessibility violations", async ({ page }) => {
   expect(bad.map((v) => `${v.id}: ${v.nodes.length} × ${v.nodes[0]?.target}`)).toEqual([]);
 });
 
-test("the film is on the page and its video file is served", async ({ page, request }) => {
+test("the film is on the page and its video file, with sound, is served", async ({ page, request }) => {
   await page.goto("/");
   const film = page.getByTestId("film");
   await expect(film).toBeAttached();
@@ -143,5 +143,8 @@ test("the film is on the page and its video file is served", async ({ page, requ
   const res = await request.get(new URL(src!, page.url()).toString());
   expect(res.status()).toBe(200);
   expect(res.headers()["content-type"]).toContain("video/mp4");
-  expect((await res.body()).length).toBeGreaterThan(100_000);
+  const body = await res.body();
+  expect(body.length).toBeGreaterThan(100_000);
+  // The film carries its score: an AAC audio track ("mp4a" sample entry).
+  expect(body.includes(Buffer.from("mp4a"))).toBe(true);
 });

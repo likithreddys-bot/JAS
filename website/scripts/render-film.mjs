@@ -1,4 +1,5 @@
-// Renders film/index.html frame by frame (deterministic, 30 fps) and encodes public/film/jas-film.mp4.
+// Renders film/index.html frame by frame (deterministic, 30 fps), adds the synthesised score
+// (scripts/film_music.py) and encodes public/film/jas-film.mp4.
 // Usage: npx vite --port 5173 & node scripts/render-film.mjs
 // Needs: Chromium (set CHROMIUM_PATH if Playwright's own is not installed) and an ffmpeg with libx264
 // (FFMPEG env var, or `pip install imageio-ffmpeg`, whose binary is found automatically).
@@ -34,9 +35,15 @@ fs.mkdirSync(out, { recursive: true });
 await page.screenshot({ path: path.join(out, "jas-film-poster.jpg"), type: "jpeg", quality: 88 });
 await browser.close();
 
+// The score: synthesised by scripts/film_music.py (needs numpy), timed to the film's beats.
+const music = path.join(frames, "music.wav");
+execFileSync("python3", [path.resolve("scripts/film_music.py"), music], { stdio: "inherit" });
+
 execFileSync(ffmpeg, [
-  "-y", "-loglevel", "error", "-framerate", String(FPS), "-i", path.join(frames, "%04d.jpg"),
-  "-c:v", "libx264", "-preset", "slow", "-crf", "21", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+  "-y", "-loglevel", "error", "-framerate", String(FPS), "-i", path.join(frames, "%04d.jpg"), "-i", music,
+  "-map", "0:v", "-map", "1:a",
+  "-c:v", "libx264", "-preset", "slow", "-crf", "21", "-pix_fmt", "yuv420p",
+  "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart",
   path.join(out, "jas-film.mp4"),
 ]);
 fs.rmSync(frames, { recursive: true, force: true });
