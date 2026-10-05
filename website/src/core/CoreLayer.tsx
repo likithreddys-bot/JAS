@@ -50,6 +50,13 @@ function Mover({ anchor, narrow, reduced, children }: { anchor: Anchor; narrow: 
   const invalidate = useThree((s) => s.invalidate);
   const first = useRef(true);
   useEffect(() => invalidate(), [anchor, invalidate]);
+  // With reduced motion the canvas renders on demand: redraw on scroll so the hero orb keeps up.
+  useEffect(() => {
+    if (!reduced) return;
+    const on = () => invalidate();
+    window.addEventListener("scroll", on, { passive: true });
+    return () => window.removeEventListener("scroll", on);
+  }, [reduced, invalidate]);
   useFrame((_, dt) => {
     if (!g.current) return;
     // "hidden" shrinks the core away where it stands instead of flying it across the text.
@@ -57,6 +64,10 @@ function Mover({ anchor, narrow, reduced, children }: { anchor: Anchor; narrow: 
       anchor === "hidden"
         ? { x: g.current.position.x, y: g.current.position.y, s: 0.001 }
         : placement(anchor, viewport.width, viewport.height, narrow);
+    // In the hero the orb belongs to the section: it scrolls with the page instead of staying pinned
+    // while the copy beneath it slides over it.
+    const heroScroll = anchor === "hero" ? (window.scrollY / window.innerHeight) * viewport.height : 0;
+    p.y += heroScroll;
     if (first.current) {
       // Entrance: the core materialises in place, unless motion is reduced.
       g.current.position.set(p.x, p.y, 0);
@@ -65,7 +76,8 @@ function Mover({ anchor, narrow, reduced, children }: { anchor: Anchor; narrow: 
     }
     const k = reduced ? 1 : 1 - Math.exp(-(g.current.scale.x < p.s * 0.6 ? 2.6 : 6) * Math.min(dt, 0.05));
     g.current.position.x += (p.x - g.current.position.x) * k;
-    g.current.position.y += (p.y - g.current.position.y) * k;
+    // In the hero, y follows the scroll exactly (no easing), so the orb moves with the page.
+    g.current.position.y = anchor === "hero" ? p.y : g.current.position.y + (p.y - g.current.position.y) * k;
     const s = g.current.scale.x + (p.s - g.current.scale.x) * k;
     g.current.scale.setScalar(s);
   });

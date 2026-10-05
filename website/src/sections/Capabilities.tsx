@@ -6,7 +6,9 @@ import { Eyebrow, H2, Section } from "./Section";
 
 type Mood = "watchful" | "blink" | "angry";
 
-/** The real lock-screen face, rendered by JAS's own app/lockart.py, blinking on the same rhythm. */
+/** The real lock screen, drawn by JAS's own app/lockart.py, shown on a laptop. It swaps between
+ *  two orb frames on the app's own timing (app/lockscreen.py: a 3-7 s gap, the alternate frame held
+ *  1 s); "Try wrong unlocks" shows what repeated wrong unlock attempts do. */
 function LockScreen() {
   const reduced = useReducedMotion();
   const { paused } = useDirector();
@@ -22,7 +24,7 @@ function LockScreen() {
         t = window.setTimeout(() => {
           setMood("watchful");
           loop();
-        }, 180);
+        }, 1000);
       }, 3000 + Math.random() * 4000);
     };
     loop();
@@ -41,31 +43,43 @@ function LockScreen() {
 
   const first = CONTACT.name.split(" ")[0];
   return (
-    <figure className="glass overflow-hidden p-0">
-      <div className="relative aspect-square bg-bg">
-        {(["watchful", "blink", "angry"] as Mood[]).map((m) => (
-          <img
-            key={m}
-            src={`${import.meta.env.BASE_URL}lock/${m}.webp`}
-            alt={m === "watchful" ? "JAS lock-screen face, watching" : ""}
-            aria-hidden={m !== "watchful"}
-            width={720}
-            height={720}
-            loading="lazy"
-            decoding="async"
-            className="absolute inset-0 size-full object-cover transition-opacity duration-150"
-            style={{ opacity: mood === m ? 1 : 0 }}
-          />
-        ))}
-        <div className="absolute inset-x-0 bottom-8 text-center">
-          <p className="font-display text-xl font-semibold">{first}'s PC</p>
-          <p className={`mt-1 text-sm ${mood === "angry" ? "text-alert" : "text-muted"}`} aria-live="polite">
-            {mood === "angry" ? `Don't touch ${first}'s PC` : "JAS is watching"}
-          </p>
+    <figure>
+      {/* the laptop */}
+      <div className="relative mx-auto w-full">
+        <div className="rounded-t-[20px] border border-white/10 bg-[#0d0b09] p-[2.2%] shadow-[0_50px_120px_-50px_rgb(232_190_118/0.4)]">
+          <div className="relative aspect-video overflow-hidden rounded-[6px] bg-bg">
+            {(["watchful", "blink", "angry"] as Mood[]).map((m) => (
+              <img
+                key={m}
+                src={`${import.meta.env.BASE_URL}lock/${m}.webp`}
+                alt={m === "watchful" ? `${first}'s PC, locked, with the JAS orb on the lock screen` : ""}
+                aria-hidden={m !== "watchful"}
+                width={1280}
+                height={720}
+                loading="lazy"
+                decoding="async"
+                className="absolute inset-0 size-full object-cover transition-opacity duration-300"
+                style={{ opacity: mood === m ? 1 : 0 }}
+              />
+            ))}
+            {/* The app writes these lines under the orb; positions match app/lockart.py. */}
+            <div className="absolute inset-x-0 top-[71%] text-center leading-tight">
+              <p className="font-display text-[clamp(0.95rem,2.4vw,1.6rem)] font-semibold">{first}'s PC</p>
+              <p
+                className={`mt-[0.6em] text-[clamp(0.65rem,1.3vw,0.9rem)] ${mood === "angry" ? "text-alert" : "text-muted"}`}
+                aria-live="polite"
+              >
+                {mood === "angry" ? `Don't touch ${first}'s PC` : "JAS is watching"}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="relative mx-[-4%] h-3 rounded-b-[14px] bg-gradient-to-b from-[#2a241d] to-[#16120e]">
+          <div className="absolute left-1/2 top-0 h-1.5 w-[14%] -translate-x-1/2 rounded-b-md bg-[#0d0b09]" />
         </div>
       </div>
-      <figcaption className="flex items-center justify-between gap-4 px-5 py-4 text-sm text-muted">
-        <span>Face rendered by JAS's own lock-screen code — not a mockup.</span>
+      <figcaption className="mt-6 flex flex-wrap items-center justify-between gap-4 text-sm text-muted">
+        <span>Drawn by JAS's own lock-screen code — not a mockup.</span>
         <button
           onClick={() => setAngry(true)}
           disabled={angry}
@@ -83,22 +97,27 @@ export function Capabilities() {
     <Section id="capabilities" state="executing" anchor="hidden" label="Capabilities" className="py-28 md:py-40">
       <Eyebrow tone="earth">Built and working today</Eyebrow>
       <H2 className="max-w-3xl">The laptop's real capabilities, reachable by voice.</H2>
-      <div className="mt-14 grid gap-10 lg:grid-cols-[1.15fr_1fr] items-start">
-        <ul className="grid gap-4 sm:grid-cols-2">
-          {CAPABILITIES.map((c) => (
-            <li key={c.title} data-reveal data-tilt className="glass p-6">
-              <h3 className="text-lg font-semibold">{c.title}</h3>
-              <p className="mt-2 text-[15px] leading-relaxed text-ink/65">{c.body}</p>
-            </li>
-          ))}
-        </ul>
-        <div data-reveal>
-          <LockScreen />
-          <p className="mt-4 text-sm text-muted leading-relaxed">
-            Windows only lets apps set the lock-screen <em>image</em>. JAS swaps it every few seconds, and Windows redraws
-            it live — so the face really blinks while the PC is locked. Repeated wrong unlock attempts make it angry.
-          </p>
-        </div>
+      <ul className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {CAPABILITIES.map((c) => (
+          <li key={c.title} data-reveal data-tilt className="glass p-6">
+            <h3 className="text-lg font-semibold">{c.title}</h3>
+            <p className="mt-2 text-[15px] leading-relaxed text-ink/65">{c.body}</p>
+          </li>
+        ))}
+      </ul>
+
+      <div id="locked" className="mt-28 md:mt-36 text-center">
+        <p className="text-sm font-medium text-sun">Present while locked</p>
+        <h3 data-reveal className="mt-3 text-4xl md:text-6xl font-semibold tracking-[-0.04em]">
+          Lock it. JAS keeps watch.
+        </h3>
+        <p data-reveal className="mx-auto mt-5 max-w-2xl text-lg text-ink/70">
+          Windows only lets apps set the lock-screen <em>image</em>. JAS swaps it every few seconds, and Windows redraws
+          it live — so the orb really moves while the PC is locked. Repeated wrong unlock attempts turn it red.
+        </p>
+      </div>
+      <div data-reveal className="mx-auto mt-12 max-w-4xl">
+        <LockScreen />
       </div>
     </Section>
   );

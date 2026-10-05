@@ -297,6 +297,11 @@ export function JasCore({ state, levelRef, reduced = false, clockRef }: JasCoreP
     return () => window.removeEventListener("pointermove", on);
   }, []);
 
+  // Overlays (thinking particles, executing arc, paused dot) are always drawn, transparent until
+  // needed, so their shaders are compiled and linked during the first frames of page load. Hiding
+  // them made the browser compile on first use instead, which stalled the page the first time JAS
+  // started thinking (seconds on a software GPU, a visible hitch on a real one).
+
   // In reduced-motion mode the canvas only renders on demand: render when the state changes.
   useEffect(() => {
     if (reduced) invalidate();
@@ -386,19 +391,16 @@ export function JasCore({ state, levelRef, reduced = false, clockRef }: JasCoreP
     if (arc.current) {
       arc.current.rotation.z = reduced ? 0 : -t * 1.1;
       (arc.current.material as MeshBasicMaterial).opacity = c.arc * 0.85;
-      arc.current.visible = c.arc > 0.01;
     }
 
     // --- thinking particles ---
     orbitMat.uniforms.uTime.value = reduced ? 0 : t;
     orbitMat.uniforms.uOpacity.value = c.orbit;
     orbitMat.uniforms.uColor.value.copy(TOKENS.sun);
-    if (orbit.current) orbit.current.visible = c.orbit > 0.01;
 
     // --- paused dot ---
     if (dot.current) {
       (dot.current.material as MeshBasicMaterial).opacity = c.dot;
-      dot.current.visible = c.dot > 0.01;
     }
   });
 
@@ -446,7 +448,7 @@ export function JasCore({ state, levelRef, reduced = false, clockRef }: JasCoreP
       </mesh>
 
       {/* executing: open arc that scans steadily */}
-      <mesh ref={arc} scale={1.34} visible={false}>
+      <mesh ref={arc} scale={1.34}>
         <torusGeometry args={[1, 0.012, 8, 160, Math.PI * 1.35]} />
         <meshBasicMaterial color={TOKENS.earth} transparent opacity={0} blending={AdditiveBlending} depthWrite={false} toneMapped={false} />
       </mesh>
@@ -458,7 +460,7 @@ export function JasCore({ state, levelRef, reduced = false, clockRef }: JasCoreP
       </group>
 
       {/* paused: one steady dot */}
-      <mesh ref={dot} position={[0, -1.5, 0]} visible={false}>
+      <mesh ref={dot} position={[0, -1.5, 0]}>
         <circleGeometry args={[0.04, 24]} />
         <meshBasicMaterial color={TOKENS.muted} transparent opacity={0} toneMapped={false} />
       </mesh>

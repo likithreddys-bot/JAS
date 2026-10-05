@@ -18,6 +18,7 @@ export const NAV = [
   { href: "#how", label: "How it works" },
   { href: "#trust", label: "Security" },
   { href: "#roadmap", label: "Roadmap" },
+  { href: "#faq", label: "FAQ" },
 ];
 
 export const HERO = {
@@ -134,7 +135,7 @@ export const CAPABILITIES = [
   { title: "A native Android app", body: "Floats over other apps and listens continuously. No hold-to-talk button." },
   { title: "Hands-free PC control", body: "Open and close apps, drive Excel — formulas, pivot tables, formatting, charts — browse, manage windows." },
   { title: "Google, built in", body: "Read and send email, read the calendar, schedule meetings, share a Drive file with someone by name." },
-  { title: "Present while locked", body: "Keeps working behind Windows' lock screen — and the lock screen's face visibly blinks." },
+  { title: "Present while locked", body: "Keeps working behind Windows' lock screen — and the orb on the lock screen visibly moves." },
   { title: "Reachable from anywhere", body: "Home Wi-Fi, or a private encrypted Tailscale tunnel when you are away." },
 ];
 
@@ -209,6 +210,42 @@ export const HIGHLIGHTS = [
   { big: "0", label: "ports opened on your router", note: "Away from home it rides a private Tailscale tunnel" },
   { big: "1 yes", label: "before anything is sent, shared or remembered", note: "Enforced by the code that runs tools" },
   { big: "6 digits", label: "of PIN on every phone request", note: "Five wrong guesses locks that source out" },
-  { big: "Locked", label: "screen? JAS keeps working", note: "And the lock screen's face really blinks" },
+  { big: "Locked", label: "screen? JAS keeps working", note: "And the orb on the lock screen really moves" },
   { big: "0 s", label: "of microphone audio sent to the cloud", note: "Wake word and speech run on your PC" },
+];
+
+/** Straight answers. Every one is taken from the client documentation. */
+export const FAQ = [
+  {
+    q: "Does JAS listen to everything I say?",
+    a: "It listens only for its name, on your laptop itself. Nothing is sent anywhere until it hears “JAS”, and speech recognition also runs on the laptop.",
+  },
+  {
+    q: "What leaves my PC?",
+    a: "Only the text of a command, sent to a language model (Google Gemini or Anthropic Claude) so it can choose which tool to use. Never your audio, and never control of your PC.",
+  },
+  {
+    q: "Can JAS send something without asking me?",
+    a: "No. Anything that sends, shares, deletes, schedules or remembers is confirmed with you first. That rule is enforced by the code that runs the tools, not by an instruction to the AI.",
+  },
+  {
+    q: "Does it work from outside my home?",
+    a: "Yes, through a private, encrypted Tailscale tunnel. No port is opened on your router, and every request from the phone needs your six-digit PIN.",
+  },
+  {
+    q: "What if my laptop is off or asleep?",
+    a: "Then JAS can't answer: nothing is running. The laptop is set never to sleep while it is plugged in.",
+  },
+  {
+    q: "Which devices does it work with?",
+    a: "Today: a Windows PC, controlled from the PC itself or from a native Android app.",
+  },
+  {
+    q: "Can it join my video calls?",
+    a: "Not yet. Joining a live call and speaking into it through the phone is in development.",
+  },
+  {
+    q: "Can my team use it?",
+    a: "Not yet. JAS is built for one person and one laptop. Team accounts are a deliberate, later phase.",
+  },
 ];

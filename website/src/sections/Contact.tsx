@@ -30,14 +30,42 @@ export function Contact() {
           </div>
         </div>
       </Section>
-      <footer className="relative px-6 md:px-16 py-10 text-sm text-muted">
-        <div className="mx-auto max-w-6xl flex flex-col md:flex-row gap-3 md:items-center md:justify-between border-t border-white/8 pt-8">
-          <p>
-            <span className="font-display text-ink font-semibold">JAS</span> · Built by {CONTACT.name} · © 2026
-          </p>
-          <p>No cookies. No trackers. No analytics. Fonts are self-hosted.</p>
+      <footer className="relative px-6 md:px-16 pt-12 pb-10 text-[13px] text-muted">
+        <div className="mx-auto max-w-6xl border-t border-white/[0.08] pt-10">
+          <div className="grid gap-8 sm:grid-cols-3">
+            <FooterCol title="See it" links={[["#film", "The film"], ["#demo", "Try the demo"], ["#how", "How it works"], ["#states", "Every state"]]} />
+            <FooterCol title="Trust" links={[["#trust", "Security"], ["#roadmap", "Limitations and roadmap"], ["#faq", "Questions"]]} />
+            <div>
+              <p className="font-medium text-ink">Contact</p>
+              <p className="mt-3">{CONTACT.name}</p>
+              <p className="mt-1 break-all select-all">{CONTACT.email}</p>
+            </div>
+          </div>
+          <div className="mt-10 flex flex-col md:flex-row gap-3 md:items-center md:justify-between border-t border-white/[0.06] pt-6">
+            <p>
+              <span className="font-display text-ink font-semibold">JAS</span> · Built by {CONTACT.name} · © 2026
+            </p>
+            <p>No cookies. No trackers. No analytics. Fonts are self-hosted.</p>
+          </div>
         </div>
       </footer>
     </>
+  );
+}
+
+function FooterCol({ title, links }: { title: string; links: [string, string][] }) {
+  return (
+    <div>
+      <p className="font-medium text-ink">{title}</p>
+      <ul className="mt-3 space-y-2">
+        {links.map(([href, label]) => (
+          <li key={href}>
+            <a href={href} className="hover:text-ink transition-colors">
+              {label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

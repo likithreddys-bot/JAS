@@ -85,10 +85,7 @@ h1, h2, h3, h4 {
 @keyframes scroll-cue { 0%,100% { transform: scaleY(0.4); opacity: .4 } 50% { transform: scaleY(1); opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .hero-in { opacity: 1; } }
 
-/* Before GSAP runs, reveal targets start hidden — but only when motion is allowed and JS is on. */
-@media (prefers-reduced-motion: no-preference) {
-  .js [data-reveal] { opacity: 0; }
-}
+/* Reveal targets are visible at rest: the scroll-in fade is an enhancement, never a gate. */
 
 /* 3D tilt cards: a soft gold sheen follows the pointer (set by useTilt). */
 [data-tilt] {

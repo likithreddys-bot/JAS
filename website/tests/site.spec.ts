@@ -88,14 +88,23 @@ test("confirm card times out to No after 60 s and never auto-confirms", async ({
   await page.goto("/#demo");
   await page.getByTestId("demo-panel").scrollIntoViewIfNeeded();
   await page.getByTestId("demo-email").click();
-  await expect(page.getByTestId("confirm-card")).toBeVisible({ timeout: 15_000 });
+  // Drive the installed clock to the card instead of waiting on the wall clock: on a loaded
+  // software-GPU runner the page's timers can lag real time by seconds.
+  await expect
+    .poll(async () => {
+      await page.clock.runFor(500);
+      return page.getByTestId("confirm-card").count();
+    }, { timeout: 30_000 })
+    .toBe(1);
+  await expect(page.getByTestId("confirm-card")).toBeVisible();
   await page.clock.fastForward(59_000);
   await expect(page.getByTestId("confirm-card")).toBeVisible();
   await page.clock.fastForward(2_000);
   await expect(page.getByTestId("demo-reply")).toHaveText(/Cancelled\. Nothing was sent\./, { timeout: 10_000 });
   // The demo only drives the core while it is on screen (off screen the page's own section does),
   // and on a phone the page can move during the minute: check the core with the demo in view.
-  await page.getByTestId("demo-panel").scrollIntoViewIfNeeded();
+  // A plain scroll: Playwright's stability check waits on animation frames, which the fake clock owns.
+  await page.getByTestId("demo-panel").evaluate((el) => el.scrollIntoView({ block: "center" }));
   await expect(page.getByTestId("core-layer")).toHaveAttribute("data-core-state", "standby");
   await expect(page.locator("[data-status]", { hasText: "Send the email" })).toHaveCount(0);
 });
@@ -147,4 +156,25 @@ test("the film is on the page and its video file, with sound, is served", async 
   expect(body.length).toBeGreaterThan(100_000);
   // The film carries its score: an AAC audio track ("mp4a" sample entry).
   expect(body.includes(Buffer.from("mp4a"))).toBe(true);
+});
+
+test("the FAQ opens to a straight answer", async ({ page }) => {
+  await page.goto("/#faq");
+  const items = page.getByTestId("faq-item");
+  await expect(items).toHaveCount(8);
+  await items.first().locator("summary").click();
+  await expect(items.first()).toHaveAttribute("open", "");
+  await expect(items.first()).toContainText("It listens only for its name");
+});
+
+test("the lock screen shows Likki's PC with the orb drawn by the app's own code", async ({ page }) => {
+  await page.goto("/#locked");
+  const shot = page.getByAltText("Likki's PC, locked, with the JAS orb on the lock screen");
+  await shot.scrollIntoViewIfNeeded();
+  // The image is lazy-loaded: wait for the real file to arrive rather than reading it mid-download.
+  await expect.poll(() => shot.evaluate((img: HTMLImageElement) => img.naturalWidth), { timeout: 15_000 }).toBe(1280);
+  await expect(shot).toBeVisible();
+  const caption = page.getByText("Drawn by JAS's own lock-screen code");
+  await caption.scrollIntoViewIfNeeded();
+  await expect(caption).toBeVisible();
 });

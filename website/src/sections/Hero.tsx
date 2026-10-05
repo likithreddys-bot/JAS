@@ -1,8 +1,27 @@
+import { useLayoutEffect, useRef } from "react";
+import { gsap } from "gsap";
 import { HERO, HERO_LOOP_SRC } from "../content";
+import { useReducedMotion } from "../core/useReducedMotion";
 import { Section } from "./Section";
 
 /** Centred, product-page hero: one line of name, one huge statement, the orb beneath it. */
 export function Hero() {
+  const copy = useRef<HTMLDivElement>(null);
+  const reduced = useReducedMotion();
+  // As the page scrolls, the headline drifts up and fades while the orb holds its place.
+  useLayoutEffect(() => {
+    if (reduced || !copy.current) return;
+    const tween = gsap.to(copy.current, {
+      yPercent: -35,
+      opacity: 0,
+      ease: "none",
+      scrollTrigger: { trigger: "#top", start: "top top", end: "45% top", scrub: true },
+    });
+    return () => {
+      tween.scrollTrigger?.kill();
+      tween.kill();
+    };
+  }, [reduced]);
   return (
     <Section id="top" state="standby" anchor="hero" label="Introduction" className="min-h-[100svh]">
       {HERO_LOOP_SRC && (
@@ -16,7 +35,7 @@ export function Hero() {
           aria-hidden
         />
       )}
-      <div className="pt-28 md:pt-32 text-center">
+      <div ref={copy} className="pt-28 md:pt-32 text-center">
         <p className="hero-in font-display text-xl md:text-2xl font-semibold text-ink" style={{ animationDelay: "80ms" }}>
           JAS
         </p>

@@ -7,6 +7,7 @@ import { Thesis } from "./sections/Thesis";
 import { Roast } from "./sections/Roast";
 import { Film } from "./sections/Film";
 import { Highlights } from "./sections/Highlights";
+import { Faq } from "./sections/Faq";
 import { Problem } from "./sections/Problem";
 import { Demo } from "./sections/Demo";
 import { HowItWorks } from "./sections/HowItWorks";
@@ -21,6 +22,11 @@ import { useTilt } from "./ui/useTilt";
 import { useReducedMotion } from "./core/useReducedMotion";
 import { STATE_LABEL } from "./core/labels";
 import { effectiveState, useDirector } from "./story/director";
+
+// Reveals must finish on time even if a frame stutters (a slow phone, a busy tab): with GSAP's
+// default lag smoothing, a run of slow frames stretches a 0.9 s fade-in into many seconds and the
+// content sits invisible. Content should never wait on the frame rate.
+gsap.ticker.lagSmoothing(0);
 
 // three.js is ~800 kB: load it after the page has painted.
 const CoreLayer = lazy(() => import("./core/CoreLayer"));
@@ -44,13 +50,29 @@ export default function App() {
       ScrollTrigger.batch("[data-reveal]", {
         start: "top 90%",
         once: true,
-        onEnter: (els) =>
+        onEnter: (els) => {
+          // Fade in only what is actually on screen. A nav-link jump passes dozens of elements at
+          // once; staggering all of them made the section you jumped to wait seconds to appear.
+          const onScreen = els.filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.bottom > 0 && r.top < window.innerHeight;
+          });
+          if (!onScreen.length) return;
           gsap.fromTo(
-            els,
+            onScreen,
             { opacity: 0, y: 24 },
-            // clearProps hands `transform` back to CSS / the tilt effect once the reveal is done.
-            { opacity: 1, y: 0, duration: 0.9, ease: "expo.out", stagger: 0.06, clearProps: "transform" },
-          ),
+            {
+              opacity: 1,
+              y: 0,
+              duration: 0.9,
+              ease: "expo.out",
+              // The whole group starts within 0.3 s, however many elements entered together.
+              stagger: Math.min(0.06, 0.3 / onScreen.length),
+              // clearProps hands `transform` back to CSS / the tilt effect once the reveal is done.
+              clearProps: "transform",
+            },
+          );
+        },
       });
     });
     // Fonts and lazy images change layout: re-measure once they land.
@@ -88,6 +110,7 @@ export default function App() {
         <Trust />
         <Honest />
         <Playground />
+        <Faq />
         <Contact />
       </main>
       {DEV && <FpsMeter />}
