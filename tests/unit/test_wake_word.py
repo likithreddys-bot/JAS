@@ -222,3 +222,31 @@ def test_a_wake_word_model_can_be_a_file_shipped_with_jarvis(tmp_path):
         pytest.skip("community jarvis model not downloaded on this machine")
     detector = load_openwakeword("jarvis_v1.onnx", 0.4, models)
     assert detector._predict(np.zeros(1280, dtype=np.int16)) < 0.5  # silence is not a wake word
+
+
+def _hey_vem_missing():
+    from app.voice.wake_word.detector import SHIPPED
+
+    return not (SHIPPED / "hey_vem.onnx").exists()
+
+
+@pytest.mark.skipif(_hey_vem_missing(), reason="hey_vem.onnx not trained yet (scripts/train_wake_word.py)")
+def test_hey_vem_ships_with_the_app_in_openwakewords_format():
+    import onnxruntime as ort
+
+    from app.voice.wake_word.detector import SHIPPED
+
+    path = SHIPPED / "hey_vem.onnx"
+    session = ort.InferenceSession(str(path))
+    assert session.get_inputs()[0].shape == [1, 16, 96]  # 16 embedding frames, as openWakeWord feeds
+    assert session.get_outputs()[0].shape == [1, 1]
+    score = session.run(None, {session.get_inputs()[0].name: np.zeros((1, 16, 96), np.float32)})[0]
+    assert 0.0 <= float(score[0][0]) <= 1.0
+
+
+@pytest.mark.skipif(_hey_vem_missing(), reason="hey_vem.onnx not trained yet (scripts/train_wake_word.py)")
+def test_a_shipped_model_is_found_when_not_in_the_models_folder(tmp_path):
+    from app.voice.wake_word.detector import load_openwakeword
+
+    detector = load_openwakeword("hey_vem.onnx", 0.5, tmp_path)  # tmp_path has no models in it
+    assert 0.0 <= detector._predict(np.zeros(1280, np.int16)) <= 1.0

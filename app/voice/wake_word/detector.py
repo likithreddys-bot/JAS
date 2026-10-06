@@ -43,6 +43,10 @@ class WakeWordDetector:
         self._reset()
 
 
+# Wake-word models trained for this app and committed with it (scripts/train_wake_word.py).
+SHIPPED = Path(__file__).resolve().parents[2] / "assets" / "wakeword"
+
+
 def load_openwakeword(model_name: str, threshold: float, models_dir: Path | None = None) -> WakeWordDetector:
     """Load an openWakeWord model.
 
@@ -57,6 +61,8 @@ def load_openwakeword(model_name: str, threshold: float, models_dir: Path | None
     built_in = Path(openwakeword.__file__).parent / "resources" / "models"
     if model_name.endswith(".onnx"):
         path = (models_dir or Path()) / model_name
+        if not path.exists() and (SHIPPED / model_name).exists():
+            path = SHIPPED / model_name  # trained for this app and kept in the repo (hey_vem.onnx)
         if not path.exists():
             raise FileNotFoundError(f"Wake-word model {path} is missing")
         if not (built_in / "melspectrogram.onnx").exists():
