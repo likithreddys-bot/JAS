@@ -1,4 +1,4 @@
-// Renders the JAS orb (studio/) into raw frames for the brand asset pack:
+// Renders the VEM orb (studio/) into raw frames for the brand asset pack:
 //   stills/<state>-black.png + <state>-white.png   (matted to transparency by orb_assets.py)
 //   loops/<state>/%04d.png                          (7 s at 30 fps on the brand black)
 // Usage: npx vite --port 5173 &  node scripts/render-orb-assets.mjs <outDir>

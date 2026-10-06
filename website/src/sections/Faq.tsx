@@ -8,14 +8,14 @@ export function Faq() {
       <h2 data-reveal className="text-center text-5xl md:text-7xl font-semibold tracking-[-0.04em]">
         Questions, answered.
       </h2>
-      <div className="mx-auto mt-14 max-w-3xl divide-y divide-ink/[0.08] border-y border-ink/[0.08]">
+      <div className="mx-auto mt-14 max-w-3xl divide-y divide-white/[0.08] border-y border-white/[0.08]">
         {FAQ.map((f) => (
           <details key={f.q} className="group py-6" data-testid="faq-item">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-6 text-xl md:text-2xl font-display font-semibold tracking-tight [&::-webkit-details-marker]:hidden">
               {f.q}
               <span
                 aria-hidden
-                className="grid size-8 shrink-0 place-items-center rounded-full border border-ink/15 text-sun transition-transform duration-300 group-open:rotate-45"
+                className="grid size-8 shrink-0 place-items-center rounded-full border border-white/15 text-sun transition-transform duration-300 group-open:rotate-45"
               >
                 +
               </span>

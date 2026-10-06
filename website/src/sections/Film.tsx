@@ -16,7 +16,7 @@ export function Film() {
           {FILM.title}
         </h2>
       </div>
-      <div data-reveal className="relative mt-12 overflow-hidden rounded-[28px] border border-ink/[0.08] bg-coal shadow-[0_50px_120px_-60px_rgb(28_25_21/0.45)]">
+      <div data-reveal className="relative mt-12 overflow-hidden rounded-[28px] border border-white/[0.08] bg-coal shadow-[0_60px_160px_-60px_rgb(232_190_118/0.35)]">
         <video
           ref={video}
           className="block w-full aspect-video"

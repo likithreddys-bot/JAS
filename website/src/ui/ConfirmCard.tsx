@@ -57,7 +57,7 @@ export function ConfirmCard({ question, onAnswer }: ConfirmCardProps) {
       transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
       className="glass p-5 border-sun/30 outline-none"
     >
-      <p className="text-xs uppercase tracking-[0.18em] text-sun">Luffy needs your yes</p>
+      <p className="text-xs uppercase tracking-[0.18em] text-sun">VEM needs your yes</p>
       <p id="confirm-q" className="mt-2 text-lg text-ink">
         {question}
       </p>
@@ -72,12 +72,12 @@ export function ConfirmCard({ question, onAnswer }: ConfirmCardProps) {
         <button
           onClick={() => answer(false, "user")}
           data-testid="confirm-no"
-          className="flex-1 min-h-14 rounded-2xl border border-ink/15 text-ink hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+          className="flex-1 min-h-14 rounded-2xl border border-white/15 text-ink hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
         >
           No, cancel
         </button>
       </div>
-      <div className="mt-4 h-0.5 rounded-full bg-ink/10 overflow-hidden" aria-hidden>
+      <div className="mt-4 h-0.5 rounded-full bg-white/10 overflow-hidden" aria-hidden>
         <div className="h-full bg-sun/70 origin-left confirm-countdown" />
       </div>
       <p className="mt-2 text-xs text-muted" data-testid="confirm-timer">

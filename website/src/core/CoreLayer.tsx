@@ -1,39 +1,95 @@
-import { useEffect, useRef, useState } from "react";
-import { DABS, paintEnso, paintEnsoRange } from "./enso";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { PerformanceMonitor } from "@react-three/drei";
+import type { Group, PerspectiveCamera } from "three";
+import { JasCore } from "./JasCore";
+import { CoreFallback } from "./CoreFallback";
+import { GoldDust } from "./GoldDust";
 import { useReducedMotion } from "./useReducedMotion";
 import { effectiveState, useDirector, type Anchor } from "../story/director";
-import type { CoreState } from "./labels";
 
-/** Ink colour per mood, as a theme token (index.css). */
-const INK: Record<CoreState, string> = {
-  standby: "--color-ink",
-  listening: "--color-sun",
-  thinking: "--color-ink",
-  executing: "--color-earth",
-  confirming: "--color-amber",
-  responding: "--color-sun",
-  success: "--color-earth",
-  error: "--color-alert",
-  paused: "--color-muted",
-};
+const FOV = 35;
+const FIT = 4.2;
 
-/** Where the circle sits for each anchor: centre (px) and diameter of the brush canvas (px). */
+function CameraRig() {
+  const camera = useThree((s) => s.camera) as PerspectiveCamera;
+  const { width, height } = useThree((s) => s.size);
+  useLayoutEffect(() => {
+    const aspect = width / Math.max(1, height);
+    const half = FIT / 2 / Math.min(1, aspect);
+    camera.position.set(0, 0, half / Math.tan(((FOV / 2) * Math.PI) / 180));
+    camera.updateProjectionMatrix();
+  }, [camera, width, height]);
+  return null;
+}
+
+/** Target placement for each anchor, in world units relative to the visible viewport. */
 function placement(anchor: Exclude<Anchor, "hidden">, w: number, h: number, narrow: boolean) {
-  const m = Math.min(w, h);
   if (narrow) {
-    if (anchor === "hero") return { x: w / 2, y: h * 0.53, d: Math.min(w * 0.95, h * 0.5) };
-    return { x: w / 2, y: h * 0.5, d: w * 0.9 };
+    if (anchor === "hero") return { x: 0, y: -h * 0.01, s: 1.0 };
+    if (anchor === "center") return { x: 0, y: 0, s: 0.85 };
+    return { x: 0, y: h * 0.3, s: 0.55 };
   }
   switch (anchor) {
     case "hero":
-      return { x: w / 2, y: h * 0.7, d: m * 0.5 };
+      return { x: 0, y: -h * 0.16, s: 0.62 };
     case "center":
-      return { x: w / 2, y: h * 0.5, d: m * 0.56 };
+      return { x: 0, y: -h * 0.02, s: 0.72 };
     case "left":
     case "how":
-      return { x: w * 0.24, y: h * 0.5, d: m * 0.8 };
+      return { x: -w * 0.26, y: 0, s: 0.85 };
     case "right":
-      return { x: w * 0.76, y: h * 0.5, d: m * 0.8 };
+      return { x: w * 0.26, y: 0, s: 0.85 };
+  }
+}
+
+/** Glides the core between anchors (transform only, damped ~600 ms). */
+function Mover({ anchor, narrow, reduced, children }: { anchor: Anchor; narrow: boolean; reduced: boolean; children: ReactNode }) {
+  const g = useRef<Group>(null);
+  const viewport = useThree((s) => s.viewport);
+  const invalidate = useThree((s) => s.invalidate);
+  const first = useRef(true);
+  useEffect(() => invalidate(), [anchor, invalidate]);
+  // With reduced motion the canvas renders on demand: redraw on scroll so the hero orb keeps up.
+  useEffect(() => {
+    if (!reduced) return;
+    const on = () => invalidate();
+    window.addEventListener("scroll", on, { passive: true });
+    return () => window.removeEventListener("scroll", on);
+  }, [reduced, invalidate]);
+  useFrame((_, dt) => {
+    if (!g.current) return;
+    // "hidden" shrinks the core away where it stands instead of flying it across the text.
+    const p =
+      anchor === "hidden"
+        ? { x: g.current.position.x, y: g.current.position.y, s: 0.001 }
+        : placement(anchor, viewport.width, viewport.height, narrow);
+    // In the hero the orb belongs to the section: it scrolls with the page instead of staying pinned
+    // while the copy beneath it slides over it.
+    const heroScroll = anchor === "hero" ? (window.scrollY / window.innerHeight) * viewport.height : 0;
+    p.y += heroScroll;
+    if (first.current) {
+      // Entrance: the core materialises in place, unless motion is reduced.
+      g.current.position.set(p.x, p.y, 0);
+      g.current.scale.setScalar(reduced ? p.s : 0.001);
+      first.current = false;
+    }
+    const k = reduced ? 1 : 1 - Math.exp(-(g.current.scale.x < p.s * 0.6 ? 2.6 : 6) * Math.min(dt, 0.05));
+    g.current.position.x += (p.x - g.current.position.x) * k;
+    // In the hero, y follows the scroll exactly (no easing), so the orb moves with the page.
+    g.current.position.y = anchor === "hero" ? p.y : g.current.position.y + (p.y - g.current.position.y) * k;
+    const s = g.current.scale.x + (p.s - g.current.scale.x) * k;
+    g.current.scale.setScalar(s);
+  });
+  return <group ref={g}>{children}</group>;
+}
+
+function hasWebGL(): boolean {
+  try {
+    const c = document.createElement("canvas");
+    return !!(c.getContext("webgl2") || c.getContext("webgl"));
+  } catch {
+    return false;
   }
 }
 
@@ -49,236 +105,62 @@ function useNarrow() {
   return narrow;
 }
 
-const rgba = (hex: string, a: number) => {
-  const n = parseInt(hex.replace("#", "").slice(0, 6), 16);
-  return Number.isNaN(n) ? `rgba(28,25,21,${a})` : `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${Math.max(0, a)})`;
-};
-
 /**
- * The one core for the whole page: Luffy's ensō, painted with the same brush as the lock screen, on
- * a fixed click-through canvas behind the content. It glides between section anchors and changes
- * mood with the story. 2D canvas, so it runs everywhere; with reduced motion (or Pause) it is drawn
- * only when something changes.
+ * The one core for the whole page: a fixed, full-viewport, click-through canvas behind the
+ * content. Falls back to a 2D core when WebGL is missing or the device can't hold frame rate.
  */
 export default function CoreLayer() {
   const d = useDirector();
   const state = effectiveState(d);
-  const reduced = useReducedMotion() || d.paused;
+  const reducedPref = useReducedMotion();
+  const reduced = reducedPref || d.paused;
   const narrow = useNarrow();
+  const [dpr, setDpr] = useState(1.75);
+  // ?force3d keeps the 3D core even on a slow device (for screenshots on machines without a GPU).
+  const force3d = new URLSearchParams(location.search).has("force3d");
+  const [fallback, setFallback] = useState(() => !hasWebGL());
+
+  // On phones there is no side column: the core steps out of side-anchored sections
+  // rather than sitting behind their text.
   const offstage = d.anchor === "hidden" || (narrow && (d.anchor === "left" || d.anchor === "right"));
-  const canvas = useRef<HTMLCanvasElement>(null);
-  // Live values for the draw loop, so it never restarts on a state change.
-  const live = useRef({ state, anchor: d.anchor, offstage, narrow, reduced, changedAt: performance.now() });
-  const redraw = useRef<() => void>(() => {});
-
-  useEffect(() => {
-    const l = live.current;
-    if (l.state !== state) l.changedAt = performance.now();
-    Object.assign(l, { state, anchor: d.anchor, offstage, narrow, reduced });
-    redraw.current();
-  }, [state, d.anchor, offstage, narrow, reduced]);
-
-  useEffect(() => {
-    const cv = canvas.current;
-    if (!cv) return;
-    const ctx = cv.getContext("2d");
-    if (!ctx) return;
-    // The canvas can only use a font the page has loaded: fetch the glyph for the 済 seal up front.
-    document.fonts?.load('700 40px "Luffy JP Display"', "済").catch((e) => console.warn("Seal font not loaded:", e));
-    const ink = document.createElement("canvas");
-    const ictx = ink.getContext("2d")!;
-    const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-    let W = 0, H = 0, dpr = 1, inkSize = 0, inkColor = "", raf = 0;
-    const pos = { x: 0, y: 0, d: 0, first: true };
-    let drawIn = live.current.reduced ? 1 : 0;
-    const t0 = performance.now();
-    // Gold leaf: a few flakes drifting slowly upward, behind everything.
-    const flakes = Array.from({ length: 26 }, (_, i) => ({
-      x: (i * 0.618) % 1, y: (i * 0.371) % 1, s: 2 + ((i * 7) % 5), v: 0.004 + ((i * 13) % 7) * 0.0012, r: i,
-    }));
-
-    const resize = () => {
-      dpr = Math.min(2, window.devicePixelRatio || 1);
-      W = window.innerWidth;
-      H = window.innerHeight;
-      cv.width = Math.round(W * dpr);
-      cv.height = Math.round(H * dpr);
-      draw(performance.now());
-    };
-
-    let painted = 0; // dabs already on the ink canvas while the stroke is drawn in
-    const paintInk = (color: string, size: number) => {
-      if (ink.width !== size) ink.width = ink.height = size;
-      paintEnso(ictx, size, color, 1);
-      inkColor = color;
-      inkSize = size;
-    };
-
-    function draw(now: number) {
-      const l = live.current, t = (now - t0) / 1000, still = l.reduced;
-      const target = l.offstage || l.anchor === "hidden"
-        ? { x: pos.x, y: pos.y, d: 0 }
-        : placement(l.anchor as Exclude<Anchor, "hidden">, W, H, l.narrow);
-      // In the hero the circle sits in the space the page reserved for it (so it never covers the
-      // headline, whatever the window's shape) and scrolls away with the page.
-      if (l.anchor === "hero" && !l.offstage) {
-        const r = document.querySelector("[data-core-slot]")?.getBoundingClientRect();
-        if (r && r.height > 0) Object.assign(target, { x: r.left + r.width / 2, y: r.top + r.height / 2, d: Math.min(r.height / 0.84, W * 0.95) });
-      }
-      if (pos.first) Object.assign(pos, target, { first: false });
-      const k = still ? 1 : 0.09;
-      pos.x += (target.x - pos.x) * k;
-      pos.y = l.anchor === "hero" ? target.y : pos.y + (target.y - pos.y) * k;
-      pos.d += (target.d - pos.d) * k;
-
-      const id = l.state, color = css(INK[id]) || "#1c1915";
-      const size = Math.max(64, Math.round(Math.max(pos.d, 1) * dpr / 64) * 64); // re-raster in steps
-      if (drawIn < 1 && !still && color === inkColor && size === inkSize) {
-        // Draw the stroke in: add the next dabs to the ink canvas, never repaint the old ones.
-        drawIn = Math.min(1, drawIn + 0.016);
-        const e = drawIn * drawIn * (3 - 2 * drawIn);
-        painted = paintEnsoRange(ictx, size, color, painted, Math.round(e * DABS.length));
-      } else if (drawIn < 1 && !still) {
-        if (ink.width !== size) ink.width = ink.height = size;
-        ictx.clearRect(0, 0, size, size);
-        painted = 0;
-        inkColor = color;
-        inkSize = size;
-      } else if (color !== inkColor || Math.abs(size - inkSize) >= 128 || painted < DABS.length) {
-        drawIn = 1;
-        painted = DABS.length;
-        paintInk(color, size);
-      }
-
-      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx!.clearRect(0, 0, W, H);
-
-      // gold leaf
-      const gold = css("--color-sun");
-      for (const f of flakes) {
-        const y = ((f.y - (still ? 0 : t * f.v)) % 1 + 1) % 1;
-        ctx!.save();
-        ctx!.translate(f.x * W, y * H);
-        ctx!.rotate(still ? f.r : t * 0.3 + f.r);
-        ctx!.fillStyle = rgba(gold, 0.28);
-        ctx!.fillRect(-f.s / 2, -f.s / 3, f.s, f.s * 0.66);
-        ctx!.restore();
-      }
-
-      if (pos.d < 2) return;
-      const c = { x: pos.x, y: pos.y }, D = pos.d;
-      // a soft wash of colour behind the circle
-      const glowA = ({ listening: 0.2, responding: 0.14 + 0.08 * Math.sin(t * 6), confirming: 0.14 + 0.06 * Math.sin(t * 2.2), error: 0.16, success: 0.16, paused: 0.03 } as Record<string, number>)[id] ?? 0.08;
-      const g = ctx!.createRadialGradient(c.x, c.y, D * 0.05, c.x, c.y, D * 0.55);
-      g.addColorStop(0, rgba(color, still ? glowA * 0.8 : glowA));
-      g.addColorStop(1, rgba(color, 0));
-      ctx!.fillStyle = g;
-      ctx!.fillRect(c.x - D, c.y - D, D * 2, D * 2);
-
-      // listening: ripples on still water
-      if (id === "listening" && !still) {
-        for (let i = 0; i < 3; i++) {
-          const p = (t * 0.5 + i / 3) % 1;
-          ctx!.strokeStyle = rgba(color, (1 - p) * 0.45);
-          ctx!.lineWidth = Math.max(1, D * 0.003);
-          ctx!.beginPath();
-          ctx!.arc(c.x, c.y, D * (0.36 + p * 0.14), 0, Math.PI * 2);
-          ctx!.stroke();
-        }
-      }
-
-      // the circle
-      const breath = still || id === "paused" ? 1
-        : 1 + 0.012 * Math.sin(t * (id === "confirming" ? 2.2 : 1.6)) + (id === "responding" ? 0.02 * Math.abs(Math.sin(t * 7)) : 0);
-      const shake = id === "error" && !still && now - l.changedAt < 600 ? Math.sin(now / 18) * D * 0.006 : 0;
-      const spin = still ? 0 : id === "thinking" ? t * 0.6 : id === "executing" ? t * 0.25 : 0;
-      ctx!.save();
-      ctx!.translate(c.x + shake, c.y);
-      ctx!.rotate(spin);
-      ctx!.scale(breath, breath);
-      ctx!.globalAlpha = id === "paused" ? 0.45 : 1;
-      ctx!.drawImage(ink, -D / 2, -D / 2, D, D);
-      ctx!.restore();
-      ctx!.globalAlpha = 1;
-
-      // thinking: three gold ink drops travel round the circle
-      if (id === "thinking") {
-        for (let i = 0; i < 3; i++) {
-          const a = (still ? 0 : t * 1.8) + i * 2.094;
-          ctx!.fillStyle = rgba(gold, 0.9);
-          ctx!.beginPath();
-          ctx!.arc(c.x + Math.cos(a) * D * 0.45, c.y + Math.sin(a) * D * 0.45, Math.max(2, D * 0.009), 0, Math.PI * 2);
-          ctx!.fill();
-        }
-      }
-      // executing: a gold arc tracks the work
-      if (id === "executing") {
-        const a = still ? 0 : t * 2.2;
-        ctx!.strokeStyle = rgba(gold, 0.9);
-        ctx!.lineWidth = Math.max(2, D * 0.006);
-        ctx!.lineCap = "round";
-        ctx!.beginPath();
-        ctx!.arc(c.x, c.y, D * 0.45, a, a + 1.1);
-        ctx!.stroke();
-      }
-      // success: the "done" seal is pressed into the middle
-      if (id === "success") {
-        const p = still ? 1 : Math.min(1, (now - l.changedAt) / 350), s = D * 0.11 * (1.4 - 0.4 * p);
-        ctx!.save();
-        ctx!.globalAlpha = p;
-        ctx!.translate(c.x, c.y);
-        ctx!.rotate(-0.06);
-        ctx!.fillStyle = css("--color-alert");
-        ctx!.fillRect(-s / 2, -s / 2, s, s);
-        ctx!.fillStyle = css("--color-bg");
-        ctx!.font = `700 ${s * 0.5}px ${css("--font-display") || "serif"}`;
-        ctx!.textAlign = "center";
-        ctx!.textBaseline = "middle";
-        ctx!.fillText("済", 0, s * 0.03);
-        ctx!.restore();
-      }
-      // paused: one still dot
-      if (id === "paused") {
-        ctx!.fillStyle = color;
-        ctx!.beginPath();
-        ctx!.arc(c.x, c.y + D * 0.46, Math.max(2, D * 0.008), 0, Math.PI * 2);
-        ctx!.fill();
-      }
-    }
-
-    // Motion: a frame loop. Still: draw on change, scroll and resize only.
-    const loop = (now: number) => {
-      draw(now);
-      if (!live.current.reduced) raf = requestAnimationFrame(loop);
-    };
-    redraw.current = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(loop);
-    };
-    const onScroll = () => live.current.reduced && draw(performance.now());
-    window.addEventListener("resize", resize);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    resize();
-    raf = requestAnimationFrame(loop);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-      window.removeEventListener("scroll", onScroll);
-      redraw.current = () => {};
-    };
-  }, []);
+  const [coreVisible, setCoreVisible] = useState(true);
+  useEffect(() => setCoreVisible(!offstage), [offstage]);
 
   return (
     <div
       aria-hidden
-      className="fixed inset-0 z-0 pointer-events-none"
-      data-core-visible={!offstage}
+      className="fixed inset-0 z-0 pointer-events-none transition-opacity duration-700"
+      data-core-visible={coreVisible}
       data-testid="core-layer"
       data-core-state={state}
       data-core-anchor={d.anchor}
-      data-dabs={DABS.length}
     >
-      <canvas ref={canvas} className="block h-full w-full" />
+      {fallback ? (
+        <div className="transition-opacity duration-500" style={{ opacity: offstage ? 0 : 1 }}>
+          <CoreFallback state={state} anchor={d.anchor} narrow={narrow} />
+        </div>
+      ) : (
+        <Canvas
+          flat
+          dpr={[1, dpr]}
+          frameloop={reduced ? "demand" : "always"}
+          camera={{ fov: FOV, position: [0, 0, 7] }}
+          gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+        >
+          {/* Measured, not guessed: drop resolution if fps falls, go 2D if it stays low. */}
+          <PerformanceMonitor
+            bounds={() => [40, 70]}
+            flipflops={3}
+            onDecline={() => setDpr(1)}
+            onFallback={() => !force3d && setFallback(true)}
+          />
+          <CameraRig />
+          <GoldDust reduced={reduced} dim={narrow ? 0.6 : 1} />
+          <Mover anchor={offstage ? "hidden" : d.anchor} narrow={narrow} reduced={reduced}>
+            <JasCore state={state} reduced={reduced} />
+          </Mover>
+        </Canvas>
+      )}
     </div>
   );
 }

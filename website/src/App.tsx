@@ -16,6 +16,7 @@ import { Capabilities } from "./sections/Capabilities";
 import { Trust } from "./sections/Trust";
 import { Honest } from "./sections/Honest";
 import { Playground } from "./sections/Playground";
+import { Voice } from "./sections/Voice";
 import { Contact } from "./sections/Contact";
 import { FpsMeter } from "./dev/FpsMeter";
 import { useTilt } from "./ui/useTilt";
@@ -93,7 +94,7 @@ export default function App() {
         <CoreLayer />
       </Suspense>
       <p className="sr-only" aria-live="polite">
-        Luffy: {STATE_LABEL[effectiveState(d)]}
+        VEM: {STATE_LABEL[effectiveState(d)]}
       </p>
       <Nav />
       <main className="relative z-10">
@@ -110,6 +111,7 @@ export default function App() {
         <Trust />
         <Honest />
         <Playground />
+        <Voice />
         <Faq />
         <Contact />
       </main>

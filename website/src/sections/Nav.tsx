@@ -5,11 +5,11 @@ import { director, useDirector } from "../story/director";
 export function Nav() {
   const { paused } = useDirector();
   return (
-    <header className="fixed top-0 inset-x-0 z-50 bg-bg/70 backdrop-blur-xl border-b border-ink/[0.06]">
-      <nav aria-label="Main" className="mx-auto max-w-6xl h-14 px-4 md:px-6 flex items-center gap-6 text-[12.5px]">
-        <a href="#top" className="flex items-center gap-2.5 font-display text-[14px] font-bold tracking-[0.3em] text-ink">
-          <span aria-hidden className="seal h-10 w-[22px] text-[10px] leading-none">ルフィ</span>
-          Luffy
+    <header className="fixed top-0 inset-x-0 z-50 bg-bg/70 backdrop-blur-xl border-b border-white/[0.06]">
+      <nav aria-label="Main" className="mx-auto max-w-6xl h-12 px-4 md:px-6 flex items-center gap-6 text-[12.5px]">
+        <a href="#top" className="flex items-center gap-2 font-display text-[15px] font-semibold tracking-[0.3em] text-ink">
+          <span aria-hidden className="inline-block size-2.5 rounded-full bg-sun shadow-[0_0_12px_2px_rgb(232_190_118/0.6)]" />
+          VEM
         </a>
         <ul className="hidden lg:flex items-center gap-7 mx-auto text-ink/70">
           {NAV.map((n) => (
@@ -31,8 +31,8 @@ export function Nav() {
             {paused ? "Resume motion" : "Pause motion"}
           </button>
           <a
-            href={`mailto:${CONTACT.email}?subject=Luffy`}
-            className="hidden sm:inline-flex px-3 py-1 bg-ink text-bg font-medium hover:bg-ink/85 transition"
+            href={`mailto:${CONTACT.email}?subject=VEM`}
+            className="hidden sm:inline-flex px-3 py-1 rounded-full bg-sun text-bg font-medium hover:brightness-105 transition"
           >
             Get in touch
           </a>

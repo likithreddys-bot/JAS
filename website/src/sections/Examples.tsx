@@ -17,12 +17,12 @@ export function Examples() {
           <RiskBadge risk="asks" /> <span className="text-muted -ml-2">Sends, shares, moves or remembers — confirmed first</span>
         </div>
 
-        <ul className="mt-10 divide-y divide-ink/8 border-y border-ink/8">
+        <ul className="mt-10 divide-y divide-white/8 border-y border-white/8">
           {EXAMPLES.map((e) => (
             <li key={e.say} data-reveal className="py-5 grid gap-2 sm:grid-cols-[1fr_auto] sm:gap-6">
               <div>
                 <p className="text-lg font-display">“{e.say}”</p>
-                <p className="mt-1.5 text-[15px] text-ink/70">{e.happens}</p>
+                <p className="mt-1.5 text-[15px] text-ink/60">{e.happens}</p>
               </div>
               <div className="sm:pt-1">
                 <RiskBadge risk={e.risk} />

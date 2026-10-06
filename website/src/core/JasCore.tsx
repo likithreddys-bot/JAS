@@ -14,7 +14,7 @@ import {
 import { GLASS, LOOKS, TOKENS, type CoreState, type Look } from "./states";
 
 /* ---------------------------------------------------------------------------
- * The JAS core: a smoked-glass sphere with light moving inside it that drifts
+ * The VEM: a smoked-glass sphere with light moving inside it that drifts
  * toward the pointer, and rings of light that ripple as they revolve around it.
  * Everything animates through transforms and uniforms: no layout, no per-frame
  * allocation.
@@ -299,7 +299,7 @@ export function JasCore({ state, levelRef, reduced = false, clockRef }: JasCoreP
 
   // Overlays (thinking particles, executing arc, paused dot) are always drawn, transparent until
   // needed, so their shaders are compiled and linked during the first frames of page load. Hiding
-  // them made the browser compile on first use instead, which stalled the page the first time JAS
+  // them made the browser compile on first use instead, which stalled the page the first time VEM
   // started thinking (seconds on a software GPU, a visible hitch on a real one).
 
   // In reduced-motion mode the canvas only renders on demand: render when the state changes.

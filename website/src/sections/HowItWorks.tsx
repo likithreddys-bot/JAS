@@ -65,7 +65,7 @@ export function HowItWorks() {
 
           <ol className="mt-8 flex gap-1.5" aria-hidden>
             {FLOW.map((_, i) => (
-              <li key={i} className="h-1 flex-1 rounded-full bg-ink/10 overflow-hidden">
+              <li key={i} className="h-1 flex-1 rounded-full bg-white/10 overflow-hidden">
                 <span
                   className="block h-full bg-sun origin-left transition-transform duration-500"
                   style={{ transform: `scaleX(${i <= step ? 1 : 0})` }}
@@ -84,7 +84,7 @@ export function HowItWorks() {
                 <div className="flex items-baseline gap-4">
                   <span className={`font-mono text-sm ${i <= step ? "text-sun" : "text-muted"}`}>0{i + 1}</span>
                   <div>
-                    <h3 className={`text-lg md:text-xl font-semibold ${i === step ? "text-ink" : "text-ink/70"}`}>{f.title}</h3>
+                    <h3 className={`text-lg md:text-xl font-semibold ${i === step ? "text-ink" : "text-ink/55"}`}>{f.title}</h3>
                     {i === step && <p className="how-active mt-2 text-ink/70 leading-relaxed">{f.body}</p>}
                   </div>
                 </div>

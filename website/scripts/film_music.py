@@ -1,10 +1,13 @@
-"""Original score for the 20-second JAS film, synthesised from scratch (no samples, no licences).
+"""Original score for the 20-second VEM film, synthesised from scratch (no samples, no licences).
 
 Timed to the film's beats (see film/film.ts):
   0.0-6.8 s   urgency: a dark A-minor pad and a ticking clock
-  6.8-12.8 s  JAS arrives: the harmony warms (Fmaj7 -> G) and a plucked arpeggio rises
+  6.8-12.8 s  VEM arrives: the harmony warms (Fmaj7 -> G) and a plucked arpeggio rises
   12.8 s      "Sent.": a bell, the clock stops, the music resolves to C major
   12.8-20 s   relief: a warm Cmaj9 under "Done in seconds." and the end card, fading out
+
+Then VEM's own voice (rendered by scripts/render_voice.py with the app's speaker) is laid over it at
+the film's beats, with the music dipped under each line so the words stay clear.
 
 Usage: python3 scripts/film_music.py out.wav      (needs numpy)
 """
@@ -150,7 +153,7 @@ def score() -> np.ndarray:
     while t < 12.8:
         tick(buf, t, 0.09 if int(t * 2) % 2 == 0 else 0.06, pan=0.25)
         t += 0.5
-    # 6.8-10.4 s: JAS appears. Fmaj7 warms the room; a plucked arpeggio starts.
+    # 6.8-10.4 s: VEM appears. Fmaj7 warms the room; a plucked arpeggio starts.
     pad(buf, [41, 48, 52, 57, 64], 6.8, 10.5, 0.45, bright=0.8)
     sub(buf, 29, 6.8, 10.4, 0.18)
     arp_f = [65, 69, 72, 76, 72, 69]
@@ -185,6 +188,37 @@ def master(buf: np.ndarray) -> np.ndarray:
     return buf / (np.max(np.abs(buf)) + 1e-9) * 0.89  # peak about -1 dBFS
 
 
+# VEM's lines: (file in film/voice, start in seconds). Timed to film/film.ts: it finds the file and
+# asks while the steps and the confirm card appear (10.55-12.2, before her tap at 12.2), says "Sent!"
+# with the bell, and introduces itself on the end card.
+VOICE_LINES = [("film-confirm", 10.55), ("film-sent", 12.86), ("film-end", 17.95)]
+VOICE_DIR = __import__("pathlib").Path(__file__).resolve().parents[1] / "film" / "voice"
+
+
+def read_mono(path) -> tuple[np.ndarray, int]:
+    with wave.open(str(path), "rb") as w:
+        data = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(np.float64) / 32768
+        return data, w.getframerate()
+
+
+def add_voice(buf: np.ndarray) -> np.ndarray:
+    """Lay VEM's lines over the score and duck the music beneath them. A missing clip is an error."""
+    duck = np.ones(N)
+    voice = np.zeros(N)
+    for name, t0 in VOICE_LINES:
+        clip, rate = read_mono(VOICE_DIR / f"{name}.wav")
+        clip = np.interp(np.arange(int(len(clip) * SR / rate)) * rate / SR, np.arange(len(clip)), clip)
+        i = int(t0 * SR)
+        clip = clip[: N - i]
+        voice[i : i + len(clip)] += clip * 0.95
+        # music down ~8 dB from just before the line to just after, with soft edges
+        a, b = max(0, i - int(0.15 * SR)), min(N, i + len(clip) + int(0.25 * SR))
+        duck[a:b] = 0.4
+    kernel = np.hanning(int(0.12 * SR))
+    duck = np.convolve(duck, kernel / kernel.sum(), mode="same")
+    return np.stack([buf[0] * duck + voice, buf[1] * duck + voice])
+
+
 def write_wav(path: str, buf: np.ndarray) -> None:
     pcm = (np.clip(buf.T, -1, 1) * 32767).astype("<i2")
     with wave.open(path, "wb") as w:
@@ -196,5 +230,5 @@ def write_wav(path: str, buf: np.ndarray) -> None:
 
 if __name__ == "__main__":
     out = sys.argv[1] if len(sys.argv) > 1 else "film-music.wav"
-    write_wav(out, master(score()))
+    write_wav(out, np.clip(add_voice(master(score())), -0.98, 0.98))
     print("wrote", out)

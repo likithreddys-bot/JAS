@@ -7,7 +7,7 @@ import { Eyebrow, H2, Section } from "./Section";
 type Mood = "watchful" | "blink" | "angry";
 
 /** The real lock screen, drawn by the app's own app/lockart.py, shown on a laptop. It swaps between
- *  two frames of the circle on the app's own timing (app/lockscreen.py: a 3-7 s gap, the alternate frame held
+ *  two orb frames on the app's own timing (app/lockscreen.py: a 3-7 s gap, the alternate frame held
  *  1 s); "Try wrong unlocks" shows what repeated wrong unlock attempts do. */
 function LockScreen() {
   const reduced = useReducedMotion();
@@ -46,13 +46,13 @@ function LockScreen() {
     <figure>
       {/* the laptop */}
       <div className="relative mx-auto w-full">
-        <div className="rounded-t-[20px] border border-ink/10 bg-[#0d0b09] p-[2.2%] shadow-[0_50px_120px_-50px_rgb(28_25_21/0.5)]">
-          <div className="relative aspect-video overflow-hidden rounded-[6px] bg-lacquer">
+        <div className="rounded-t-[20px] border border-white/10 bg-[#0d0b09] p-[2.2%] shadow-[0_50px_120px_-50px_rgb(232_190_118/0.4)]">
+          <div className="relative aspect-video overflow-hidden rounded-[6px] bg-bg">
             {(["watchful", "blink", "angry"] as Mood[]).map((m) => (
               <img
                 key={m}
                 src={`${import.meta.env.BASE_URL}lock/${m}.webp`}
-                alt={m === "watchful" ? `${first}'s PC, locked, with the Luffy ensō on the lock screen` : ""}
+                alt={m === "watchful" ? `${first}'s PC, locked, with the VEM orb on the lock screen` : ""}
                 aria-hidden={m !== "watchful"}
                 width={1280}
                 height={720}
@@ -62,22 +62,14 @@ function LockScreen() {
                 style={{ opacity: mood === m ? 1 : 0 }}
               />
             ))}
-            {/* The app draws these over the picture; positions and colours match app/lockart.py. */}
-            <span
-              aria-hidden
-              className="tate absolute right-[5.5%] top-[9%] grid place-items-center border-[2px] border-[#d9543a] px-[0.35em] py-[0.5em] font-display text-[clamp(0.55rem,1.25vw,0.95rem)] font-bold leading-[1.15] text-[#d9543a] rotate-[6deg]"
-            >
-              ルフィ
-            </span>
-            <div className="absolute inset-x-0 top-[68.5%] text-center leading-tight text-[#efe7d8]">
-              <p className="font-display text-[clamp(0.95rem,2.6vw,1.75rem)] font-bold">{first}'s PC</p>
+            {/* The app writes these lines under the orb; positions match app/lockart.py. */}
+            <div className="absolute inset-x-0 top-[71%] text-center leading-tight">
+              <p className="font-display text-[clamp(0.95rem,2.4vw,1.6rem)] font-semibold">{first}'s PC</p>
               <p
-                className={`mt-[0.7em] text-[clamp(0.6rem,1.25vw,0.85rem)] ${
-                  mood === "angry" ? "font-display font-bold text-[#d9543a] text-[clamp(0.7rem,1.6vw,1.05rem)]" : "uppercase tracking-[0.32em] text-[#a99f90]"
-                }`}
+                className={`mt-[0.6em] text-[clamp(0.65rem,1.3vw,0.9rem)] ${mood === "angry" ? "text-alert" : "text-muted"}`}
                 aria-live="polite"
               >
-                {mood === "angry" ? `Don't touch ${first}'s PC` : "Luffy is watching"}
+                {mood === "angry" ? `Don't touch ${first}'s PC` : "VEM is watching"}
               </p>
             </div>
           </div>
@@ -115,13 +107,13 @@ export function Capabilities() {
       </ul>
 
       <div id="locked" className="mt-28 md:mt-36 text-center">
-        <p className="text-sm font-medium text-sun">見張り · Present while locked</p>
+        <p className="text-sm font-medium text-sun">Present while locked</p>
         <h3 data-reveal className="mt-3 text-4xl md:text-6xl font-semibold tracking-[-0.04em]">
-          Lock it. Luffy keeps watch.
+          Lock it. VEM keeps watch.
         </h3>
         <p data-reveal className="mx-auto mt-5 max-w-2xl text-lg text-ink/70">
-          Windows only lets apps set the lock-screen <em>image</em>. Luffy swaps it every few seconds, and Windows redraws
-          it live — so the brush circle really turns while the PC is locked. Repeated wrong unlock attempts turn it vermilion.
+          Windows only lets apps set the lock-screen <em>image</em>. VEM swaps it every few seconds, and Windows redraws
+          it live — so the orb really moves while the PC is locked. Repeated wrong unlock attempts turn it red.
         </p>
       </div>
       <div data-reveal className="mx-auto mt-12 max-w-4xl">

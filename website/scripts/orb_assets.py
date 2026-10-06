@@ -1,4 +1,4 @@
-"""Turns the raw frames from render-orb-assets.mjs into the JAS orb asset pack.
+"""Turns the raw frames from render-orb-assets.mjs into the VEM orb asset pack.
 
   stills/jas-orb-<state>.png         1024x1024, transparent (difference matte: black vs white render)
   stills/jas-orb-<state>-black.png   1024x1024 on the brand black #080706

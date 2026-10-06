@@ -5,16 +5,16 @@ export function Honest() {
   return (
     <Section id="roadmap" state="standby" anchor="hidden" label="Limitations and roadmap" className="py-28 md:py-40">
       <Eyebrow tone="muted">Honest by design</Eyebrow>
-      <H2 className="max-w-4xl">What Luffy can't do yet — and the real path forward.</H2>
+      <H2 className="max-w-4xl">What VEM can't do yet — and the real path forward.</H2>
       <p data-reveal className="mt-6 max-w-2xl text-lg text-ink/70">
         An honest account of the limits is as important as the list of features. These are real and current, not hedging.
       </p>
 
       <ul className="mt-12 grid gap-3 sm:grid-cols-2">
         {LIMITATIONS.map((l) => (
-          <li key={l.what} data-reveal className="rounded-[20px] border border-ink/8 bg-ink/[0.02] p-6">
+          <li key={l.what} data-reveal className="rounded-[20px] border border-white/8 bg-white/[0.02] p-6">
             <h3 className="text-[17px] font-semibold">{l.what}</h3>
-            <p className="mt-2 text-[15px] leading-relaxed text-ink/70">{l.why}</p>
+            <p className="mt-2 text-[15px] leading-relaxed text-ink/60">{l.why}</p>
           </li>
         ))}
       </ul>
