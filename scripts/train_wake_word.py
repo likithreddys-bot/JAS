@@ -43,7 +43,14 @@ CONFUSABLE = [
     "Hey Ben", "Hey them", "Hey Jim", "Hey Ken", "Hey man", "Hey Fam", "Hey Gem", "Hey mum",
     "Hey when", "Hey friend", "Hey Siri", "Hey Jarvis", "VEM", "Hey", "Hey you", "Hey hem",
     "Hey Venus", "Have them", "Hey Pam", "Hey Tim", "Okay then", "Hey, where?", "Hey, Wendy",
+    # phrases an earlier model fell for (hey + a short word ending in a nasal, or VEM alone)
+    "Hey Vince", "Hey M", "Them", "Hey Ram", "Hey Sam", "Hey Tom", "Hey Kim", "Hey Dan", "Hey Jen",
+    "Hey hen", "Hey ten", "Hey Len", "Hey Gwen", "Hey Glen", "Hey them all", "Hey Vegas", "Hey Vivek",
+    "Hey Vera", "Hey Vijay", "Hey welcome", "Hey wait", "Hey Mem", "Hem", "Fem", "Venom", "M", "Hey Em",
+    "Hey, them?", "Hey, Ben!", "Hey, Pam!", "Aim", "Hey I'm", "Heyyy", "Hey hey", "Okay", "Hey Ma",
 ]
+# Not used as negatives: "Hey Venn" and "Hey Wem" differ from "Hey VEM" by one sound and are what a
+# hurried or accented "Hey VEM" can sound like; teaching the model to reject them would cost real wakes.
 SENTENCES = [
     "Can you send the report to my manager?", "What's the weather like in Hyderabad today?",
     "I'll be back in ten minutes.", "Let's meet at the station at six.", "Turn the music down a bit.",
@@ -212,25 +219,33 @@ def main(kokoro_dir: Path, out: Path) -> None:
     print(f"{len(speakers)} speakers, {len(held)} held out")
 
     pos = {"train": [], "test": []}
-    neg = {"train": [], "test": []}
+    neg = {"train": [], "test": []}  # ordinary sentences: seen as a running stream
+    conf = {"train": [], "test": []}  # near-misses: placed exactly like the positives
     for name, style in speakers:
         split = "test" if name in held else "train"
         for text in rng.choice(POSITIVE_TEXTS, 4, replace=False):
             pos[split].append(say(k, style, text, rng.uniform(0.8, 1.3)))
-        for text in rng.choice(CONFUSABLE, 6, replace=False):
-            neg[split].append(say(k, style, text, rng.uniform(0.85, 1.25)))
-        for text in rng.choice(SENTENCES, 3, replace=False):
+        for text in rng.choice(CONFUSABLE, 22, replace=False):
+            conf[split].append(say(k, style, text, rng.uniform(0.85, 1.25)))
+        for text in rng.choice(SENTENCES, 4, replace=False):
             neg[split].append(say(k, style, text, rng.uniform(0.9, 1.2)))
-    print(f"synthesised {sum(map(len, pos.values()))} positives, {sum(map(len, neg.values()))} negatives "
+    print(f"synthesised {sum(map(len, pos.values()))} positives, {sum(map(len, conf.values()))} near-misses, "
+          f"{sum(map(len, neg.values()))} sentences "
           f"in {time.time() - t0:.0f}s")
     babble = [c for c in neg["train"] if len(c) > SR]
 
-    def build(split: str, copies_pos: int, copies_neg: int):
+    def build(split: str, copies_pos: int, copies_neg: int, copies_conf: int = 3):
         clips, labels = [], []
         for w in pos[split]:
             for _ in range(copies_pos):
                 clips.append(augment(place(w, rng.uniform(0.0, 0.35)), babble))
                 labels.append(1)
+        # The decisive negatives: a near-miss ending where "Hey VEM" would end, so the model has to
+        # tell them apart by the word itself, not by where speech stops in the window.
+        for w in conf[split]:
+            for _ in range(copies_conf):
+                clips.append(augment(place(w, rng.uniform(0.0, 0.35)), babble))
+                labels.append(0)
         neg_stream = np.concatenate([np.concatenate([c, np.zeros(int(rng.uniform(0.1, 0.6) * SR))]) for c in neg[split]])
         for wdw in windows(neg_stream):
             for _ in range(copies_neg):
@@ -241,7 +256,7 @@ def main(kokoro_dir: Path, out: Path) -> None:
             labels.append(0)
         return clips, np.array(labels)
 
-    clips, y = build("train", 8, 1)
+    clips, y = build("train", 6, 1, 3)
     print(f"training clips: {int(y.sum())} positive, {int((1 - y).sum())} negative; embedding...")
     x = embed(clips).reshape(len(clips), -1)
     mean, std = x.mean(0), x.std(0) + 1e-6
@@ -250,7 +265,7 @@ def main(kokoro_dir: Path, out: Path) -> None:
     rep = max(1, int((1 - y).sum() // max(1, y.sum())))
     xb = np.concatenate([xs, np.repeat(xs[y == 1], rep - 1, axis=0)])
     yb = np.concatenate([y, np.ones(int(y.sum()) * (rep - 1), dtype=int)])
-    mlp = MLPClassifier(hidden_layer_sizes=(128, 64), alpha=1e-3, batch_size=256, max_iter=60,
+    mlp = MLPClassifier(hidden_layer_sizes=(128, 64), alpha=1e-3, batch_size=256, max_iter=80,
                         early_stopping=True, validation_fraction=0.1, random_state=SEED)
     mlp.fit(xb, yb)
     print(f"trained in {time.time() - t0:.0f}s total; best validation score {mlp.best_validation_score_:.4f}")
@@ -262,8 +277,10 @@ def main(kokoro_dir: Path, out: Path) -> None:
     pos_clean = np.concatenate([np.concatenate([np.zeros(SR), w, np.zeros(SR)]) for w in pos["test"]])
     pos_noisy = np.concatenate([np.concatenate([np.zeros(SR), augment(np.concatenate([w, np.zeros(SR // 2)]), babble), np.zeros(SR // 2)])
                                 for w in pos["test"]])
-    neg_test = np.concatenate([np.concatenate([augment(c, babble) if rng.random() < 0.5 else c, np.zeros(SR // 3)])
-                               for c in neg["test"]])
+    held_neg = conf["test"] + neg["test"]
+    order_neg = rng.permutation(len(held_neg))
+    neg_test = np.concatenate([np.concatenate([augment(held_neg[i], babble) if rng.random() < 0.5 else held_neg[i],
+                                               np.zeros(SR // 3)]) for i in order_neg])
     hours = len(neg_test) / SR / 3600
     for thr in (0.3, 0.5, 0.7, 0.9):
         report[f"threshold_{thr}"] = {
