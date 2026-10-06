@@ -1,12 +1,12 @@
 import QtQuick
 import QtQuick.Window
 
-// Shown around the whole screen while JARVIS is looking at it, so it is never watching invisibly.
+// Shown around the whole screen while the assistant is looking at it, so it is never watching invisibly.
 // The window is click-through (see ui/screenglow.py); nothing here ever takes input.
 Window {
     id: glow
 
-    property color accent: "#4DD0C8"
+    property color accent: "#E8BE76"
     property bool watching: false
 
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowTransparentForInput
@@ -18,7 +18,7 @@ Window {
 
     function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
-    // Fades in when JARVIS starts looking and out when it stops, so it never blinks on and off.
+    // Fades in when it starts looking and out when it stops, so it never blinks on and off.
     property real strength: 0
     Behavior on strength { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
     onWatchingChanged: strength = watching ? 1 : 0

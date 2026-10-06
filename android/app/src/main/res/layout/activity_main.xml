@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0B0E14"
+    android:background="#080706"
     android:fillViewport="true">
 
     <LinearLayout
@@ -22,10 +22,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/app_name"
-            android:textColor="#E8ECF4"
+            android:textColor="#F7F1E6"
             android:textSize="15sp"
             android:textStyle="bold"
-            android:letterSpacing="0.4"
+            android:letterSpacing="0.5"
             android:layout_marginTop="8dp"/>
 
         <TextView
@@ -33,7 +33,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/connecting"
-            android:textColor="#9AA3B5"
+            android:textColor="#A69C8D"
             android:textSize="13sp"
             android:layout_marginTop="4dp"/>
 
@@ -41,7 +41,7 @@
             android:id="@+id/said"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#C9D3E4"
+            android:textColor="#D8CEBE"
             android:textSize="15sp"
             android:lineSpacingExtra="3dp"
             android:layout_marginTop="12dp"/>
@@ -51,8 +51,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/host_hint"
-            android:textColorHint="#6D768A"
-            android:textColor="#E8ECF4"
+            android:textColorHint="#7A7164"
+            android:textColor="#F7F1E6"
             android:textSize="16sp"
             android:inputType="textUri"
             android:importantForAutofill="no"
@@ -63,8 +63,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/pin_hint"
-            android:textColorHint="#6D768A"
-            android:textColor="#E8ECF4"
+            android:textColorHint="#7A7164"
+            android:textColor="#F7F1E6"
             android:textSize="16sp"
             android:inputType="number"
             android:importantForAutofill="no"
@@ -79,6 +79,8 @@
             android:textSize="17sp"
             android:textStyle="bold"
             android:textAllCaps="false"
+            android:textColor="#080706"
+            android:backgroundTint="#E8BE76"
             android:paddingTop="14dp"
             android:paddingBottom="14dp"
             android:layout_marginTop="18dp"/>
@@ -88,7 +90,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/steps"
-            android:textColor="#7C8699"
+            android:textColor="#8A8174"
             android:textSize="12sp"
             android:lineSpacingExtra="2dp"
             android:layout_marginTop="10dp"/>
@@ -105,8 +107,8 @@
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
                 android:hint="@string/type_hint"
-                android:textColorHint="#6D768A"
-                android:textColor="#E8ECF4"
+                android:textColorHint="#7A7164"
+                android:textColor="#F7F1E6"
                 android:textSize="16sp"
                 android:inputType="text"
                 android:imeOptions="actionSend"
@@ -117,6 +119,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textAllCaps="false"
+                android:textColor="#080706"
+                android:backgroundTint="#E8BE76"
                 android:text="@string/send"/>
         </LinearLayout>
 
@@ -125,14 +129,14 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="#1E2634"
+            android:background="#2A2419"
             android:layout_marginTop="28dp"/>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/away_label"
-            android:textColor="#7C8699"
+            android:textColor="#8A8174"
             android:textSize="12sp"
             android:layout_marginTop="14dp"/>
 
@@ -141,8 +145,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/away_hint"
-            android:textColorHint="#5A6375"
-            android:textColor="#C9D3E4"
+            android:textColorHint="#6B6358"
+            android:textColor="#D8CEBE"
             android:textSize="13sp"
             android:inputType="textUri"
             android:importantForAutofill="no"
@@ -152,7 +156,7 @@
             android:id="@+id/cert"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#5A6375"
+            android:textColor="#6B6358"
             android:textSize="10sp"
             android:layout_marginTop="12dp"/>
 
@@ -168,7 +172,7 @@
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
                 android:text="@string/hide_jas"
-                android:textColor="#7C8699"
+                android:textColor="#8A8174"
                 android:textSize="12sp"
                 android:gravity="center"
                 android:paddingTop="12dp"
@@ -180,7 +184,7 @@
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
                 android:text="@string/pair_again"
-                android:textColor="#7C8699"
+                android:textColor="#8A8174"
                 android:textSize="12sp"
                 android:gravity="center"
                 android:paddingTop="12dp"

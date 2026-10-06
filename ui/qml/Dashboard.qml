@@ -3,7 +3,7 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import QtQuick.Window
 
-// JARVIS dashboard: status, activity timeline and settings. Data comes from `dashboard` (ui/dashboard.py).
+// VEM dashboard: status, activity timeline and settings. Data comes from `dashboard` (ui/dashboard.py).
 Window {
     id: root
     width: 880
@@ -12,12 +12,13 @@ Window {
     minimumHeight: 520
     visible: false
     title: bridge.assistantName
-    color: "#0B0E14"
+    color: "#080706"
 
     readonly property string uiFont: "Segoe UI Variable Display"
-    readonly property color line: "#1B2130"
-    readonly property color dim: "#8E97A8"
-    readonly property color bright: "#E8ECF4"
+    readonly property color line: "#2A2419"
+    readonly property color dim: "#A69C8D"
+    readonly property color bright: "#F7F1E6"
+    readonly property color gold: "#E8BE76"
     property int tab: 0
 
     Timer { interval: 2000; running: root.visible; repeat: true; onTriggered: dashboard.refresh() }
@@ -25,7 +26,7 @@ Window {
 
     component Card: Rectangle {
         radius: 14
-        color: "#11151F"
+        color: "#15110D"
         border.width: 1
         border.color: root.line
     }
@@ -45,15 +46,22 @@ Window {
 
         RowLayout {  // header
             spacing: 14
-            Rectangle {
-                width: 12; height: 12; radius: 6
-                color: dashboard.status.color
+            Item {  // the orb in miniature, in the colour of the current state
+                width: 44; height: 44
                 Layout.alignment: Qt.AlignVCenter
+                GlassOrb {
+                    width: 180; height: 180
+                    anchors.centerIn: parent
+                    scale: 44 / 180
+                    accent: dashboard.status.color
+                    active: root.visible
+                    look: bridge.look
+                }
             }
             Text {
                 text: bridge.assistantName
                 color: root.bright
-                font { family: root.uiFont; pixelSize: 17; weight: Font.DemiBold; letterSpacing: 3 }
+                font { family: root.uiFont; pixelSize: 17; weight: Font.DemiBold; letterSpacing: 5 }
             }
             Text {
                 text: dashboard.status.state + "  ·  up " + dashboard.status.uptime
@@ -76,7 +84,7 @@ Window {
                     }
                     background: Rectangle {
                         radius: 9
-                        color: root.tab === index ? "#1B2130" : "transparent"
+                        color: root.tab === index ? "#2A2113" : "transparent"
                     }
                 }
             }
@@ -170,7 +178,7 @@ Window {
                                     spacing: 8
                                     Text {
                                         text: modelData.ok ? "✓" : "✕"
-                                        color: modelData.ok ? "#6FE3B4" : "#FF7A85"
+                                        color: modelData.ok ? "#A8CF78" : "#EE7A63"
                                         font { family: root.uiFont; pixelSize: 13; weight: Font.Bold }
                                     }
                                     Text {
@@ -194,12 +202,12 @@ Window {
                                     text: parent.text; color: root.dim
                                     font { family: root.uiFont; pixelSize: 12 }
                                 }
-                                background: Rectangle { radius: 8; color: "#161C28"; border.width: 1; border.color: root.line }
+                                background: Rectangle { radius: 8; color: "#1D1810"; border.width: 1; border.color: root.line }
                             }
                         }
                     }
                 }
-                Card {  // type to JARVIS
+                Card {  // type to the assistant
                     Layout.fillWidth: true
                     Layout.preferredHeight: 56
                     RowLayout {
@@ -209,6 +217,7 @@ Window {
                             id: typeBox
                             Layout.fillWidth: true
                             placeholderText: "Type a request instead of speaking, then press Enter"
+                            placeholderTextColor: root.dim
                             color: root.bright
                             font { family: root.uiFont; pixelSize: 14 }
                             background: Rectangle { color: "transparent" }
@@ -219,10 +228,10 @@ Window {
                             enabled: typeBox.text.trim().length > 0
                             onClicked: { dashboard.ask(typeBox.text); typeBox.text = "" }
                             contentItem: Text {
-                                text: parent.text; color: parent.enabled ? root.bright : root.dim
-                                font { family: root.uiFont; pixelSize: 13 }
+                                text: parent.text; color: parent.enabled ? "#080706" : root.dim
+                                font { family: root.uiFont; pixelSize: 13; weight: Font.DemiBold }
                             }
-                            background: Rectangle { radius: 8; color: parent.enabled ? "#243049" : "#161C28" }
+                            background: Rectangle { radius: 8; color: parent.enabled ? root.gold : "#1D1810" }
                         }
                     }
                 }
@@ -299,8 +308,8 @@ Window {
                                 font { family: root.uiFont; pixelSize: 13 }
                                 onTextChanged: settingsView.edits[modelData.key] = text
                                 background: Rectangle {
-                                    radius: 8; color: "#161C28"; border.width: 1
-                                    border.color: parent.activeFocus ? "#4F8CFF" : root.line
+                                    radius: 8; color: "#1D1810"; border.width: 1
+                                    border.color: parent.activeFocus ? root.gold : root.line
                                 }
                             }
                         }
@@ -316,16 +325,16 @@ Window {
                         font { family: root.uiFont; pixelSize: 12 }
                     }
                     Button {
-                        text: "Restart JARVIS"
+                        text: "Restart " + bridge.assistantName
                         onClicked: dashboard.restart()
                         contentItem: Text { text: parent.text; color: root.dim; font { family: root.uiFont; pixelSize: 13 } }
-                        background: Rectangle { radius: 8; color: "#161C28"; border.width: 1; border.color: root.line }
+                        background: Rectangle { radius: 8; color: "#1D1810"; border.width: 1; border.color: root.line }
                     }
                     Button {
                         text: "Save settings"
                         onClicked: dashboard.save(settingsView.edits)
-                        contentItem: Text { text: parent.text; color: root.bright; font { family: root.uiFont; pixelSize: 13 } }
-                        background: Rectangle { radius: 8; color: "#243049" }
+                        contentItem: Text { text: parent.text; color: "#080706"; font { family: root.uiFont; pixelSize: 13; weight: Font.DemiBold } }
+                        background: Rectangle { radius: 8; color: root.gold }
                     }
                 }
             }

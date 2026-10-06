@@ -23,7 +23,7 @@ data class Snapshot(
     val busy: Boolean,
 ) {
     companion object {
-        val offline = Snapshot("offline", "can't reach the laptop", "#7C8699", "", "", "", 0, false, false)
+        val offline = Snapshot("offline", "can't reach the laptop", "#A69C8D", "", "", "", 0, false, false)
     }
 }
 
@@ -125,7 +125,7 @@ class Laptop(context: Context) {
             Snapshot(
                 state = j.optString("state", "standby"),
                 label = j.optString("label", ""),
-                colour = j.optString("colour", "#FFC46B"),
+                colour = j.optString("colour", "#E8BE76"),
                 body = j.optString("body", ""),
                 heard = j.optString("heard", ""),
                 said = j.optString("said", ""),
@@ -172,7 +172,7 @@ class Laptop(context: Context) {
         }
     }
 
-    /** The current reply as WAV bytes, rendered in JAS's own voice on the laptop. */
+    /** The current reply as WAV bytes, rendered in VEM's own voice on the laptop. */
     suspend fun voice(): ByteArray? = withContext(Dispatchers.IO) {
         try {
             val c = open("/voice", "GET", 20_000)
@@ -190,7 +190,7 @@ class Laptop(context: Context) {
     /** Plain words for the two failures that actually happen: wrong certificate, or no laptop. */
     private fun reason(e: Exception): String = when {
         e is javax.net.ssl.SSLHandshakeException || e.cause is java.security.cert.CertificateException ->
-            "This is not the laptop JAS was paired with — tap Pair again if the laptop made a new certificate."
+            "This is not the laptop VEM was paired with — tap Pair again if the laptop made a new certificate."
         else -> e.message ?: e.javaClass.simpleName
     }
 

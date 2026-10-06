@@ -11,14 +11,14 @@ import kotlin.math.max
 import kotlin.math.sin
 
 /**
- * Edge lighting: the rim of the phone's screen glows in JAS's colour while it is listening or
+ * Edge lighting: the rim of the phone's screen glows in VEM's colour while it is listening or
  * working, the way a notification light would. It never takes touches, so whatever app you are
  * using carries on as normal underneath.
  */
 class EdgeGlow(context: Context) : View(context) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private var accent = Color.parseColor("#FFC46B")
+    private var accent = Color.parseColor("#E8BE76")
     private var strength = 0f      // where the glow is now
     private var wanted = 0f        // where it is heading
     private var startedAt = System.nanoTime()

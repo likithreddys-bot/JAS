@@ -1,4 +1,4 @@
-"""Bridge between the JARVIS core and QML.
+"""Bridge between the assistant core and QML.
 
 Core events may be published from any thread. They are re-emitted through a Qt
 signal, which Qt delivers on the UI thread (queued connection across threads).
@@ -20,16 +20,16 @@ from app.core.events.events import (
 )
 from app.core.jarvis import Jarvis
 from app.core.state.states import JarvisState
-from ui.theme import STATE_BODY, STATE_COLORS, STATE_FACES, STATE_LABELS
+from ui.theme import STATE_BODY, STATE_COLORS, STATE_LABELS, STATE_LOOKS
 
 LINGER_MS = 8000  # keep the last reply and steps visible for a moment after finishing
-GAZE_MS = 50  # how often the eyes check where the mouse is
-GAZE_REACH = 380.0  # px from the face at which the eyes are turned as far as they go
+GAZE_MS = 50  # how often the orb checks where the mouse is
+GAZE_REACH = 380.0  # px from the orb at which the light inside leans as far as it goes
 
 
 def gaze_direction(cursor: tuple[int, int], centre: tuple[int, int],
                    reach: float = GAZE_REACH) -> tuple[float, float]:
-    """Where the eyes should point, as x/y in -1..1. Close to the face they barely move."""
+    """Which way the light inside the orb should lean, as x/y in -1..1. Close to the orb it barely moves."""
     dx, dy = cursor[0] - centre[0], cursor[1] - centre[1]
     distance = math.hypot(dx, dy)
     if distance < 1.0:
@@ -47,7 +47,7 @@ class UiBridge(QObject):
     menuRequested = Signal()
     _incoming = Signal(object)
 
-    def __init__(self, core: Jarvis, assistant_name: str = "JAS", wake_phrase: str = "Jarvis") -> None:
+    def __init__(self, core: Jarvis, assistant_name: str = "VEM", wake_phrase: str = "Jarvis") -> None:
         super().__init__()
         self._core = core
         self._name = assistant_name
@@ -60,8 +60,8 @@ class UiBridge(QObject):
         self._gaze = (0.0, 0.0)
         self._linger = QTimer(self, singleShot=True, interval=LINGER_MS)
         self._linger.timeout.connect(self._clear)
-        self._eyes = QTimer(self, interval=GAZE_MS)
-        self._eyes.timeout.connect(self._look)
+        self._gaze_timer = QTimer(self, interval=GAZE_MS)
+        self._gaze_timer.timeout.connect(self._look)
         self._incoming.connect(self._apply)
         for event_type in (StateChanged, TranscriptReady, AssistantReply, AudioLevel, ToolStarted, ToolFinished):
             core.bus.subscribe(event_type, self._incoming.emit)
@@ -96,13 +96,13 @@ class UiBridge(QObject):
             self._level = 0.0
             self.levelChanged.emit()
             self.stateChanged.emit()
-            self._watch(STATE_FACES[event.current] != "asleep")  # closed eyes don't need to follow the mouse
+            self._watch(STATE_LOOKS[event.current] != "asleep")  # a paused orb doesn't need to follow the mouse
 
     def _watch(self, on: bool) -> None:
         if on and self._centre:
-            self._eyes.start()
+            self._gaze_timer.start()
         elif not on:
-            self._eyes.stop()
+            self._gaze_timer.stop()
 
     def _look(self) -> None:
         position = QCursor.pos()
@@ -137,18 +137,18 @@ class UiBridge(QObject):
         return STATE_LABELS[self._state]
 
     @Property(str, notify=stateChanged)
-    def expression(self) -> str:
-        """Which face JARVIS wears: calm, alert, listening, thinking, focused, warm, concerned, asleep."""
-        return STATE_FACES[self._state]
+    def look(self) -> str:
+        """Which look the orb wears: calm, alert, listening, thinking, focused, warm, concerned, asleep."""
+        return STATE_LOOKS[self._state]
 
     @Property(str, notify=stateChanged)
     def body(self) -> str:
-        """Which body is in the sky: sun, moon, mars, jupiter, saturn... or "" for an error."""
+        """The old planet name for this state. Only old phone builds read it; the orb no longer draws it."""
         return STATE_BODY.get(self._state, "")
 
     @Property(str, notify=stateChanged)
     def sky(self) -> str:
-        """The sun and the moon bring a corona, stars and z's; the planets are just planets."""
+        """"sun" or "moon" for the two states that used to have their own sky; kept for the tests that pin them."""
         return self.body if self.body in ("sun", "moon") else ""
 
     @Property(float, notify=gazeChanged)
@@ -161,9 +161,9 @@ class UiBridge(QObject):
 
     @Slot(int, int)
     def watchFrom(self, x: int, y: int) -> None:
-        """The face tells us where it is on screen, so the eyes can follow the mouse from there."""
+        """The orb tells us where it is on screen, so the light inside can lean towards the mouse."""
         self._centre = (x, y)
-        self._watch(STATE_FACES[self._state] != "asleep")
+        self._watch(STATE_LOOKS[self._state] != "asleep")
 
     @Property(str, notify=captionChanged)
     def caption(self) -> str:

@@ -1,18 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The launcher and notification mark: the sphere with its two eyes. -->
+<!-- The launcher and notification mark: VEM's glass orb with two crossing rings of light (the real
+     orb has three, with waves in them). No background on purpose: the notification bar uses only
+     this shape's outline. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="48dp" android:height="48dp"
     android:viewportWidth="48" android:viewportHeight="48">
-    <path android:fillColor="#FFC46B"
-        android:pathData="M24,5a19,19 0 1,0 0.1,0z"/>
-    <path android:fillColor="#12151E"
-        android:pathData="M17.5,25.5a4.6,4.6 0 1,0 0.1,0z"/>
-    <path android:fillColor="#12151E"
-        android:pathData="M30.5,25.5a4.6,4.6 0 1,0 0.1,0z"/>
-    <path android:strokeColor="#12151E" android:strokeWidth="2.2"
-        android:strokeLineCap="round" android:fillColor="#00000000"
-        android:pathData="M13,17.5 Q17.5,14.8 22,17.5"/>
-    <path android:strokeColor="#12151E" android:strokeWidth="2.2"
-        android:strokeLineCap="round" android:fillColor="#00000000"
-        android:pathData="M26,17.5 Q30.5,14.8 35,17.5"/>
+
+    <!-- the far sides of the rings, which the glass hides -->
+    <group android:rotation="-24" android:pivotX="24" android:pivotY="24">
+        <path android:strokeColor="#E8BE76" android:strokeWidth="1.6"
+            android:fillColor="#00000000"
+            android:pathData="M2.5,24a21.5,6.5 0 1,0 43,0a21.5,6.5 0 1,0 -43,0"/>
+    </group>
+    <group android:rotation="30" android:pivotX="24" android:pivotY="24">
+        <path android:strokeColor="#C2A260" android:strokeWidth="1.4"
+            android:fillColor="#00000000"
+            android:pathData="M4.5,24a19.5,8.5 0 1,0 39,0a19.5,8.5 0 1,0 -39,0"/>
+    </group>
+
+    <!-- the sphere: warm light low in smoked glass -->
+    <path android:pathData="M24,10.5a13.5,13.5 0 1,0 0.1,0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="21" android:centerY="22"
+                android:gradientRadius="18">
+                <item android:offset="0" android:color="#F3DDAA"/>
+                <item android:offset="0.5" android:color="#E8BE76"/>
+                <item android:offset="1" android:color="#5A4119"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- the near halves, passing in front of the glass -->
+    <group android:rotation="-24" android:pivotX="24" android:pivotY="24">
+        <path android:strokeColor="#F7F1E6" android:strokeWidth="1.6"
+            android:strokeLineCap="round" android:fillColor="#00000000"
+            android:pathData="M2.5,24a21.5,6.5 0 0,0 43,0"/>
+    </group>
+    <group android:rotation="30" android:pivotX="24" android:pivotY="24">
+        <path android:strokeColor="#E8BE76" android:strokeWidth="1.4"
+            android:strokeLineCap="round" android:fillColor="#00000000"
+            android:pathData="M4.5,24a19.5,8.5 0 0,0 39,0"/>
+    </group>
 </vector>

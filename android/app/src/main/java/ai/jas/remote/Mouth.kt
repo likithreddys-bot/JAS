@@ -6,7 +6,7 @@ import android.media.AudioTrack
 import android.util.Log
 
 /**
- * Speaks a WAV the laptop rendered, so the reply comes out of the phone in JAS's own voice.
+ * Speaks a WAV the laptop rendered, so the reply comes out of the phone in VEM's own voice.
  * Plays straight from memory: no temporary files, and the caller learns exactly when it is done
  * so the microphone can be unmuted at the right moment.
  */

@@ -562,17 +562,30 @@ def test_a_cough_does_not_wake_whisper():
     assert "if (wasSpeech) send(done)" in page, "a clip that fails the tests is dropped, not sent"
 
 
-def test_the_phone_shows_the_same_face_as_the_laptop():
-    """The phone is not a cut-down JAS: same moods, same planets, same blinking."""
+def test_the_phone_shows_the_same_orb_as_the_laptop():
+    """The phone is not a cut-down version: same looks, same rings of light, same palette."""
     from app.remote import phone_page
 
-    page = phone_page("JAS")
-    for mood in ("calm", "alert", "listening", "thinking", "focused", "warm", "concerned", "asleep"):
-        assert mood in page, mood
-    for body in ("moon", "mercury", "jupiter", "earth", "saturn"):
-        assert body in page, body
-    assert "craters" in page and "rings" in page and "blink" in page
+    page = phone_page("VEM")
+    for look in ("calm", "alert", "listening", "thinking", "focused", "warm", "concerned", "asleep"):
+        assert look in page, look
+    assert "wavy(" in page and "RINGS" in page, "the rings of light"
+    assert "orbit" in page and "arc" in page, "the thinking motes and the working arc"
     assert 'class="edge"' in page, "edge lighting"
+    # the face with eyes and the planets are gone
+    for old in ("pupL", "browL", "craters", "saturn", "blink"):
+        assert old not in page, old
+
+
+def test_the_phone_page_has_no_blue():
+    """VEM's palette is black and gold: no colour in the page may have blue as its strongest channel."""
+    import re
+
+    from app.remote import phone_page
+
+    for colour in set(re.findall(r"#[0-9A-Fa-f]{6}\b", phone_page("VEM"))):
+        r, g, b = (int(colour[i:i + 2], 16) for i in (1, 3, 5))
+        assert b <= max(r, g), f"{colour} is bluish"
 
 
 def test_the_certificate_covers_this_machines_address(tmp_path):
