@@ -1,0 +1,15 @@
+# Netlify builds the VEM website from this repo on every push to main.
+# The site lives in website/; Netlify runs the build there and publishes website/dist.
+[build]
+  base = "website"
+  command = "npm ci && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Long cache for fingerprinted assets (their file names change when their content does).
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
