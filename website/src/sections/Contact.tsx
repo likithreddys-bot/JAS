@@ -43,7 +43,7 @@ export function Contact() {
           </div>
           <div className="mt-10 flex flex-col md:flex-row gap-3 md:items-center md:justify-between border-t border-white/[0.06] pt-6">
             <p>
-              <span className="font-display text-ink font-semibold">VEM</span> · Built by {CONTACT.name} · © 2026
+              <span className="font-display text-ink font-semibold">VEM</span> (VEMMAI) · Built by {CONTACT.name} · © 2026
             </p>
             <p>No cookies. No trackers. No analytics. Fonts are self-hosted.</p>
           </div>
