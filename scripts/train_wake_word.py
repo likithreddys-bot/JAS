@@ -49,6 +49,15 @@ CONFUSABLE = [
     "Hey Vera", "Hey Vijay", "Hey welcome", "Hey wait", "Hey Mem", "Hem", "Fem", "Venom", "M", "Hey Em",
     "Hey, them?", "Hey, Ben!", "Hey, Pam!", "Aim", "Hey I'm", "Heyyy", "Hey hey", "Okay", "Hey Ma",
 ]
+# Minimal pairs at the sound level: "hey" + a syllable one sound away from VEM (/vɛm/), spoken from
+# phonemes so the contrast is exact. Kept out: /vɛn/ (Venn) and /vɪm/, which an accented or hurried
+# "Hey VEM" can sound like.
+PHONEME_NEGATIVES = (
+    [f"hˈeɪ {c}ˈɛm" for c in ["b", "d", "f", "g", "k", "l", "n", "p", "s", "t", "w", "ð", "θ", "ʃ", "z", "ʤ", "ʧ", "h", "j", "m", "ɹ"]]
+    + [f"hˈeɪ v{v}m" for v in ["ˈæ", "ˈʌ", "ˈɑː", "ˈoʊ", "ˈuː", "ˈiː", "ˈaɪ"]]
+    + [f"hˈeɪ vˈɛ{e}" for e in ["t", "s", "ɡ", "l", "k", "p", "d", "ʃ"]]
+    + ["vˈɛm", "hˈɛm", "hˈeɪ ˈɛm", "hˈeɪ vˈɛmz", "hˈeɪ vˈɛmbɚ"]
+)
 # Not used as negatives: "Hey Venn" and "Hey Wem" differ from "Hey VEM" by one sound and are what a
 # hurried or accented "Hey VEM" can sound like; teaching the model to reject them would cost real wakes.
 SENTENCES = [
@@ -225,9 +234,14 @@ def main(kokoro_dir: Path, out: Path) -> None:
         split = "test" if name in held else "train"
         for text in rng.choice(POSITIVE_TEXTS, 4, replace=False):
             pos[split].append(say(k, style, text, rng.uniform(0.8, 1.3)))
-        for text in rng.choice(CONFUSABLE, 22, replace=False):
+        for text in rng.choice(CONFUSABLE, 16, replace=False):
             conf[split].append(say(k, style, text, rng.uniform(0.85, 1.25)))
-        for text in rng.choice(SENTENCES, 4, replace=False):
+        for ph in rng.choice(PHONEME_NEGATIVES, 14, replace=False):
+            audio, sr = k.create(ph, voice=style, speed=rng.uniform(0.85, 1.25), is_phonemes=True)
+            conf[split].append(to16k(audio, sr))
+        # held-out speakers read every sentence: a longer stream of ordinary speech to count
+        # false wakes per hour on, which is what matters day to day
+        for text in (SENTENCES if split == "test" else rng.choice(SENTENCES, 4, replace=False)):
             neg[split].append(say(k, style, text, rng.uniform(0.9, 1.2)))
     print(f"synthesised {sum(map(len, pos.values()))} positives, {sum(map(len, conf.values()))} near-misses, "
           f"{sum(map(len, neg.values()))} sentences "
@@ -256,7 +270,7 @@ def main(kokoro_dir: Path, out: Path) -> None:
             labels.append(0)
         return clips, np.array(labels)
 
-    clips, y = build("train", 6, 1, 3)
+    clips, y = build("train", 6, 1, 4)
     print(f"training clips: {int(y.sum())} positive, {int((1 - y).sum())} negative; embedding...")
     x = embed(clips).reshape(len(clips), -1)
     mean, std = x.mean(0), x.std(0) + 1e-6
@@ -265,7 +279,7 @@ def main(kokoro_dir: Path, out: Path) -> None:
     rep = max(1, int((1 - y).sum() // max(1, y.sum())))
     xb = np.concatenate([xs, np.repeat(xs[y == 1], rep - 1, axis=0)])
     yb = np.concatenate([y, np.ones(int(y.sum()) * (rep - 1), dtype=int)])
-    mlp = MLPClassifier(hidden_layer_sizes=(128, 64), alpha=1e-3, batch_size=256, max_iter=80,
+    mlp = MLPClassifier(hidden_layer_sizes=(256, 128), alpha=1e-3, batch_size=256, max_iter=80,
                         early_stopping=True, validation_fraction=0.1, random_state=SEED)
     mlp.fit(xb, yb)
     print(f"trained in {time.time() - t0:.0f}s total; best validation score {mlp.best_validation_score_:.4f}")
@@ -277,17 +291,19 @@ def main(kokoro_dir: Path, out: Path) -> None:
     pos_clean = np.concatenate([np.concatenate([np.zeros(SR), w, np.zeros(SR)]) for w in pos["test"]])
     pos_noisy = np.concatenate([np.concatenate([np.zeros(SR), augment(np.concatenate([w, np.zeros(SR // 2)]), babble), np.zeros(SR // 2)])
                                 for w in pos["test"]])
-    held_neg = conf["test"] + neg["test"]
-    order_neg = rng.permutation(len(held_neg))
-    neg_test = np.concatenate([np.concatenate([augment(held_neg[i], babble) if rng.random() < 0.5 else held_neg[i],
-                                               np.zeros(SR // 3)]) for i in order_neg])
-    hours = len(neg_test) / SR / 3600
+    def stream_of(items):
+        return np.concatenate([np.concatenate([augment(c, babble) if rng.random() < 0.5 else c, np.zeros(SR // 2)])
+                               for c in items])
+
+    speech_test, near_test = stream_of(neg["test"]), stream_of(conf["test"])
+    hours = len(speech_test) / SR / 3600
     for thr in (0.3, 0.5, 0.7, 0.9):
         report[f"threshold_{thr}"] = {
             "detected_clean": f"{stream_eval(out, pos_clean, thr)}/{len(pos['test'])}",
             "detected_noisy": f"{stream_eval(out, pos_noisy, thr)}/{len(pos['test'])}",
-            "false_activations_on_held_out_speech": stream_eval(out, neg_test, thr),
-            "held_out_negative_minutes": round(hours * 60, 1),
+            "false_wakes_per_hour_ordinary_speech": round(stream_eval(out, speech_test, thr) / hours, 1),
+            "ordinary_speech_minutes": round(hours * 60, 1),
+            "near_misses_that_woke_it": f"{stream_eval(out, near_test, thr)}/{len(conf['test'])}",
         }
     print(json.dumps(report, indent=2))
     out.with_suffix(".eval.json").write_text(json.dumps(report, indent=2))
