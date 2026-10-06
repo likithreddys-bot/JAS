@@ -2,6 +2,7 @@ import threading
 import time
 
 import numpy as np
+import pytest
 
 from app.core.events.events import (
     MicrophoneRecovered,
