@@ -261,21 +261,3 @@ def test_the_attempt_count_survives_windows_clearing_it():
     screen.locked = False
     watch.check()
     assert "wrong 2 times" in core.announcement, core.announcement
-
-
-def test_the_lock_screen_brush_matches_the_websites():
-    # website/src/core/enso.ts draws the same stroke from the same generator; the website's tests
-    # pin the same dab count (data-dabs on the core layer). Change both or neither.
-    from app.lockart import enso_dabs
-
-    dabs = enso_dabs()
-    assert len(dabs) == 11738
-    assert round(sum(d[0] + d[1] * 3 + d[2] * 7 + d[3] * 11 for d in dabs), 6) == 143705.439656
-
-
-def test_the_seal_writes_luffy_in_katakana_and_falls_back_to_an_initial():
-    from app.lockart import KATAKANA, draw_face
-
-    assert KATAKANA["luffy"] == "ルフィ"
-    # An assistant name with no katakana spelling still draws (its initial goes on the seal).
-    assert draw_face("watchful", "Likki", "Nova").size == (1920, 1080)

@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     tts_voice_higher: str = "en_GB-jenny_dioco-medium"
     voice_matches_speaker: bool = True
     tts_voice: str = "en_GB-alan-medium"
+    # "kokoro" (natural, lively; ~375 MB RAM) or "piper" (lighter, flatter). Piper is also the
+    # automatic fallback if Kokoro can't load. Voice chosen by the user from samples: am_puck.
+    tts_engine: str = "kokoro"
+    kokoro_voice: str = "am_puck"
+    # Kokoro voice for higher-pitched speakers (VOICE_MATCHES_SPEAKER); empty = always kokoro_voice.
+    kokoro_voice_higher: str = ""
     tts_speed: float = 1.0
     stt_model: str = "small"
     # Language code for speech-to-text; empty = auto-detect (less reliable on short phrases).
@@ -70,7 +76,7 @@ class Settings(BaseSettings):
     remote_enabled: bool = True
     remote_port: int = 8770
 
-    assistant_name: str = "JAS"
+    assistant_name: str = "VEM"
     # What JAS tells the user to say to wake it. The wake-word MODEL decides what actually works,
     # so this only changes the wording, never the detection.
     wake_phrase: str = "Jarvis"

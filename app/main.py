@@ -56,7 +56,7 @@ from app.voice.pipeline import (
     echo_reply,
 )
 from app.voice.stt import make_transcriber
-from app.voice.tts.speaker import Speaker
+from app.voice.tts import make_speaker
 from app.voice.wake_word.detector import load_openwakeword, load_porcupine
 from app.voice.wake_word.service import WakeWordService
 from ui import hotkey
@@ -114,9 +114,9 @@ def start_voice(core: Jarvis, settings: Settings, services: list[WakeWordService
         if settings.wake_word_engine.strip().lower() != "porcupine" or wake_problem:
             detector = load_openwakeword(settings.wake_word_model, settings.wake_word_threshold,
                                          settings.models_dir / "openwakeword")
-        speaker = Speaker(settings.tts_voice, settings.models_dir / "piper", settings.tts_speed,
-                          settings.tts_voice_higher)
-        speaker.prepare(ACK_PHRASE, NOT_UNDERSTOOD, STOPPED_PHRASE, WORKING_PHRASE)
+        speaker = make_speaker(settings)
+        speaker.prepare((ACK_PHRASE, "greeting"), (NOT_UNDERSTOOD, "error"), STOPPED_PHRASE,
+                        (WORKING_PHRASE, "working"))
     except Exception as exc:
         log.exception("Voice failed to load")
         core.start()

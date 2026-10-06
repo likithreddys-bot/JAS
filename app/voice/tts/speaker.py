@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 
+from app.voice.tts.moods import style
+
 log = logging.getLogger("jarvis.voice.tts")
 
 BLOCK_SECONDS = 0.05
@@ -22,15 +24,13 @@ class Speaker:
 
     def __init__(self, voice: str, models_dir: Path, speed: float = 1.0,
                  higher_voice: str = "") -> None:
-        from piper import SynthesisConfig
-
         self._models_dir = models_dir
         self._names = {"lower": voice, "higher": higher_voice or voice}
         self._voices: dict[str, object] = {}
-        self._config = SynthesisConfig(length_scale=1.0 / speed)
         self._kind = "lower"
         self._stop = threading.Event()
-        self._cache: dict[tuple[str, str], np.ndarray] = {}
+        self._speed = speed
+        self._cache: dict[tuple[str, str, str], np.ndarray] = {}
         self._load("lower")
 
     def _load(self, kind: str):
@@ -65,19 +65,31 @@ class Speaker:
         self._kind = kind
         log.info("Answering in the %s voice (%s)", kind, self._names[kind])
 
-    def prepare(self, *phrases: str) -> None:
-        """Pre-render fixed phrases (e.g. "Yes?") so they play instantly. Also warms up the engine."""
-        for phrase in phrases:
-            self._cache[(self._kind, phrase)] = np.concatenate(
-                [c.audio_int16_array for c in self._voice.synthesize(phrase, self._config)]
-            )
+    def _synth(self, text: str, mood: str) -> np.ndarray:
+        """int16 audio for `text`, paced and levelled for `mood` (see moods.py)."""
+        from piper import SynthesisConfig
 
-    def render(self, text: str) -> bytes:
+        key = (self._kind, mood, text)
+        if key in self._cache:
+            return self._cache[key]
+        speed, gain = style(mood)
+        config = SynthesisConfig(length_scale=1.0 / (self._speed * speed))
+        audio = np.concatenate([c.audio_int16_array for c in self._voice.synthesize(text, config)])
+        return (audio.astype(np.float32) * gain).astype(np.int16)
+
+    def prepare(self, *phrases: str | tuple[str, str]) -> None:
+        """Pre-render fixed phrases (e.g. "Yes?") so they play instantly. Also warms up the engine.
+        Each is text or (text, mood)."""
+        for p in phrases:
+            text, mood = (p, "reply") if isinstance(p, str) else p
+            self._cache[(self._kind, mood, text)] = self._synth(text, mood)
+
+    def render(self, text: str, mood: str = "reply") -> bytes:
         """The same voice as a WAV, for sending somewhere else (the phone) instead of playing it."""
         import io
         import wave
 
-        audio = np.concatenate([c.audio_int16_array for c in self._voice.synthesize(text, self._config)])
+        audio = self._synth(text, mood)
         buffer = io.BytesIO()
         with wave.open(buffer, "wb") as out:
             out.setnchannels(1)
@@ -86,22 +98,18 @@ class Speaker:
             out.writeframes(audio.tobytes())
         return buffer.getvalue()
 
-    def speak(self, text: str) -> bool:
+    def speak(self, text: str, mood: str = "reply") -> bool:
         """Speak `text`, blocking until done. Returns False if interrupted by `stop()`."""
         self._stop.clear()
-        key = (self._kind, text)
-        chunks = [self._cache[key]] if key in self._cache else (
-            c.audio_int16_array for c in self._voice.synthesize(text, self._config)
-        )
+        audio = self._synth(text, mood)
         block = int(self._rate * BLOCK_SECONDS)
         with sd.OutputStream(samplerate=self._rate, channels=1, dtype="int16") as out:
-            for audio in chunks:
-                for i in range(0, len(audio), block):
-                    if self._stop.is_set():
-                        out.abort()
-                        log.info("Speech interrupted")
-                        return False
-                    out.write(audio[i : i + block])
+            for i in range(0, len(audio), block):
+                if self._stop.is_set():
+                    out.abort()
+                    log.info("Speech interrupted")
+                    return False
+                out.write(audio[i : i + block])
             out.write(np.zeros(int(self._rate * TAIL_SECONDS), dtype=np.int16))
         return True
 
