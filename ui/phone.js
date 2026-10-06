@@ -1,5 +1,5 @@
-// JAS on the phone: the same face, moods and planets as the orb on the laptop.
-// Everything here only draws — what JAS is doing comes from /state.
+// VEM on the phone: the same glass orb and rings of light as the orb on the laptop.
+// Everything here only draws — what it is doing comes from /state.
 
 const $ = id => document.getElementById(id);
 const esc = s => s.replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c]));
@@ -7,27 +7,29 @@ const esc = s => s.replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt
 let pin = localStorage.getItem('jas-pin') || '';
 if (!pin) { pin = prompt('PIN (shown on your laptop)') || ''; localStorage.setItem('jas-pin', pin); }
 
-// How each mood sits: how open the eyes are, how the brows tilt, how big the pupils are.
-// Kept in step with ui/theme.py and ui/qml/Face.qml.
-const MOODS = {
-  waking:    {open: 0.55, brow:   0, lift:  0, pupil: 0.95, curve:  6},
-  calm:      {open: 1.00, brow:   0, lift:  0, pupil: 1.00, curve:  6},
-  alert:     {open: 1.12, brow:  -5, lift:  6, pupil: 1.25, curve:  3},
-  listening: {open: 1.06, brow:  -3, lift:  4, pupil: 1.18, curve:  3},
-  thinking:  {open: 0.70, brow:  10, lift: -2, pupil: 0.85, curve:  8},
-  focused:   {open: 0.80, brow:   7, lift: -1, pupil: 0.92, curve:  8},
-  warm:      {open: 0.00, brow:  -6, lift:  5, pupil: 1.00, curve:-14},
-  concerned: {open: 0.85, brow:  15, lift: -4, pupil: 0.72, curve: 10},
-  asleep:    {open: 0.06, brow:   0, lift: -1, pupil: 0.80, curve:  7}
+// How each look sits: light inside the glass (glow), glow around it (halo), light at the edge (rim),
+// ring brightness (waves), how fast the rings revolve (spin), motes (orbit), a working arc, a paused
+// dot, a swell while speaking (pulse). Kept in step with ui/theme.py (STATE_LOOKS) and
+// ui/qml/GlassOrb.qml, which draw the same orb on the laptop.
+const LOOKS = {
+  waking:    {glow: 0.60, halo: 0.35, rim: 0.70, waves: 0.40, spin: 0.6, orbit: 0, arc: 0, dot: 0, pulse: 0},
+  calm:      {glow: 1.00, halo: 0.60, rim: 0.90, waves: 0.75, spin: 1.0, orbit: 0, arc: 0, dot: 0, pulse: 0},
+  alert:     {glow: 1.25, halo: 1.00, rim: 1.20, waves: 1.00, spin: 2.2, orbit: 0, arc: 0, dot: 0, pulse: 0},
+  listening: {glow: 1.30, halo: 1.10, rim: 1.20, waves: 1.00, spin: 2.4, orbit: 0, arc: 0, dot: 0, pulse: 0},
+  thinking:  {glow: 0.60, halo: 0.30, rim: 0.70, waves: 0.45, spin: 1.4, orbit: 1, arc: 0, dot: 0, pulse: 0},
+  focused:   {glow: 0.90, halo: 0.60, rim: 1.00, waves: 0.55, spin: 1.7, orbit: 0, arc: 1, dot: 0, pulse: 0},
+  warm:      {glow: 1.10, halo: 0.75, rim: 1.00, waves: 1.00, spin: 1.6, orbit: 0, arc: 0, dot: 0, pulse: 1},
+  concerned: {glow: 1.00, halo: 0.80, rim: 1.20, waves: 0.65, spin: 2.6, orbit: 0, arc: 0, dot: 0, pulse: 0},
+  asleep:    {glow: 0.30, halo: 0.12, rim: 0.45, waves: 0.15, spin: 0.0, orbit: 0, arc: 0, dot: 1, pulse: 0}
 };
-const FACE_FOR = {
+const LOOK_FOR = {
   starting: 'waking', standby: 'calm', wake_detected: 'alert', listening: 'listening',
   transcribing: 'thinking', thinking: 'thinking', planning: 'thinking',
   executing: 'focused', observing: 'focused', responding: 'warm',
   error: 'concerned', sleeping: 'asleep', resting: 'asleep'
 };
 
-let mood = MOODS.calm, blink = 0, look = {x: 0, y: 0}, body = '';
+let target = LOOKS.calm, cur = {...LOOKS.calm}, look = {x: 0, y: 0}, voice = 0, accentNow = '#E8BE76';
 
 function mix(hex, white, t) {
   const n = parseInt(hex.slice(1), 16);
@@ -41,86 +43,126 @@ const shade = (hex, k) => {
 };
 
 function paint(accent) {
-  const skin = mix(accent, 255, 0.58);
-  document.documentElement.style.setProperty('--accent', accent);
-  document.documentElement.style.setProperty('--skin', skin);
-  $('lit').setAttribute('stop-color', mix(accent, 255, 0.74));
-  $('mid').setAttribute('stop-color', skin);
-  $('dim').setAttribute('stop-color', shade(skin, 0.72));
-  $('rim').setAttribute('stroke', mix(accent, 255, 0.25));
-  for (const id of ['ring1', 'ring2']) $(id).setAttribute('stroke', mix(accent, 255, 0.35));
-  for (const c of document.querySelectorAll('#craters circle')) c.setAttribute('fill', shade(skin, 0.88));
-  for (const b of document.querySelectorAll('#bands ellipse')) b.setAttribute('fill', shade(skin, 0.86));
+  accentNow = accent;
+  const root = document.documentElement.style;
+  root.setProperty('--accent', accent);
+  const stop = (id, color, opacity) => { const e = $(id); e.setAttribute('stop-color', color); e.setAttribute('stop-opacity', opacity); };
+  // the light inside the glass, then a second one turning the other way, then the rim
+  stop('la0', mix(accent, 255, 0.45), 0.95); stop('la1', accent, 0.80);
+  stop('la2', shade(accent, 0.45), 0.38);    stop('la3', accent, 0);
+  stop('lb0', mix(accent, 0, 0), 0.34);      stop('lb1', accent, 0);
+  stop('e0', accent, 0);                     stop('e1', accent, 0);
+  stop('e2', mix(accent, 255, 0.2), 0.40);   stop('e3', mix(accent, 255, 0.5), 0.85);
+  $('hair').setAttribute('stroke', mix(accent, 255, 0.5)); $('hair').setAttribute('stroke-opacity', '.35');
+  $('arc').setAttribute('stroke', mix(accent, 255, 0.3));
+  $('dot').setAttribute('fill', accent);
+  for (const p of document.querySelectorAll('.bloom')) p.setAttribute('stroke', accent);
+  for (const p of document.querySelectorAll('.line')) p.setAttribute('stroke', mix(accent, 255, 0.25));
+  for (const c of document.querySelectorAll('.mote')) c.setAttribute('fill', mix(accent, 255, 0.5));
 }
 
-// The markings that make each body itself, drawn once and shown by mood.
-(function markings() {
-  const craters = [[62, 74, 15], [132, 60, 9], [140, 122, 18], [74, 138, 11], [100, 96, 7]];
-  $('craters').innerHTML = craters.map(([x, y, r]) =>
-    `<circle cx="${x}" cy="${y}" r="${r}"/>`).join('');
-  const bands = [[48, 10], [74, 15], [118, 12], [146, 9]];
-  $('bands').innerHTML = bands.map(([y, h]) =>
-    `<ellipse cx="100" cy="${y}" rx="78" ry="${h / 2}"/>`).join('');
-  $('seas').innerHTML = `
-    <ellipse cx="62" cy="86" rx="24" ry="16" fill="#5FA86B"/>
-    <ellipse cx="132" cy="70" rx="17" ry="12" fill="#5FA86B"/>
-    <ellipse cx="140" cy="128" rx="23" ry="15" fill="#5FA86B"/>
-    <ellipse cx="74" cy="140" rx="15" ry="11" fill="#5FA86B"/>`;
-})();
+// --- the orb: three rings of light round a sphere of glass ------------------------------------
+// The geometry is built once. Each ring is a circle seen at an angle (tilted, flattened) with a
+// wave running round it, cut in two so the near half crosses in front of the glass and the far
+// half passes behind it. Only rotations, opacities and a few positions change after that.
 
-function showBody(name) {
-  if (name === body) return;
-  body = name;
-  const on = el => el.setAttribute('opacity', '1'), off = el => el.setAttribute('opacity', '0');
-  (name === 'moon' || name === 'mercury' ? on : off)($('craters'));
-  (['jupiter', 'neptune', 'uranus'].includes(name) ? on : off)($('bands'));
-  (name === 'earth' ? on : off)($('seas'));
-  $('rings').setAttribute('opacity', name === 'saturn' ? '1' : '0');
-}
+const SPHERE = 44, CENTRE = 100, TAU = Math.PI * 2;
+const RINGS = [
+  {f: 1.36, lobes: 6, tilt: -20, squash: 0.34, secs: 26, dir:  1},
+  {f: 1.62, lobes: 8, tilt:  26, squash: 0.38, secs: 34, dir: -1},
+  {f: 1.90, lobes: 4, tilt:  -6, squash: 0.26, secs: 44, dir:  1}
+];
+const phase = RINGS.map(() => 0);
 
-function draw() {
-  const openNow = Math.max(0, mood.open * (1 - blink));
-  const round = Math.min(1, openNow / 0.28);
-  $('eyes').setAttribute('opacity', round.toFixed(2));
-  $('shut').setAttribute('opacity', (1 - round).toFixed(2));
-  for (const [eye, cx] of [['L', 72], ['R', 128]]) {
-    const ry = Math.max(1.2, 21 * openNow);
-    $('eye' + eye).firstElementChild.setAttribute('ry', ry.toFixed(1));
-    const pr = Math.min(10.5 * mood.pupil, ry);
-    const px = cx + look.x * 8, py = 103 + look.y * 6;
-    const pup = $('pup' + eye), spark = $('spark' + eye);
-    pup.setAttribute('r', pr.toFixed(1)); pup.setAttribute('cx', px.toFixed(1)); pup.setAttribute('cy', py.toFixed(1));
-    spark.setAttribute('cx', (px - 4).toFixed(1)); spark.setAttribute('cy', (py - 4).toFixed(1));
-    spark.setAttribute('opacity', pr > 5 ? '1' : '0');
-    const dir = eye === 'L' ? 1 : -1;
-    const bx = eye === 'L' ? 56 : 112, tilt = mood.brow * dir * 0.6, lift = -mood.lift;
-    $('brow' + eye).setAttribute('d',
-      `M${bx} ${62 + lift + tilt} Q${bx + 16} ${54 + lift} ${bx + 32} ${62 + lift - tilt}`);
-    const sx = eye === 'L' ? 53 : 109;
-    $('shut' + eye).setAttribute('d', `M${sx} 103 Q${sx + 19} ${103 + mood.curve} ${sx + 38} 103`);
+function wavy(f, lobes) {
+  const base = SPHERE * f, amp = base * 0.065;
+  let d = '';
+  for (let i = 0; i <= 240; i++) {
+    const a = i / 240 * TAU, r = base + amp * Math.sin(lobes * a);
+    d += (i ? 'L' : 'M') + (CENTRE + r * Math.cos(a)).toFixed(1) + ' ' + (CENTRE + r * Math.sin(a)).toFixed(1);
   }
-  $('brows').setAttribute('opacity', body === 'moon' ? '0' : '1');
+  return d;
 }
-
-// Blinking, on the same irregular rhythm as the laptop.
-(function blinker() {
-  const next = () => 2200 + Math.random() * 4200;
-  setTimeout(function go() {
-    if (mood.open > 0.2) {
-      const start = performance.now();
-      const step = now => {
-        const t = (now - start) / 190;
-        blink = t < 0.4 ? t / 0.4 : t < 1 ? 1 - (t - 0.4) / 0.6 : 0;
-        draw();
-        if (t < 1) requestAnimationFrame(step); else blink = 0;
-      };
-      requestAnimationFrame(step);
-    }
-    setTimeout(go, next());
-  }, next());
+(function build() {
+  const ring = (r, i, side) => `<g transform="translate(100 100) rotate(${r.tilt}) scale(1 ${r.squash}) translate(-100 -100)"
+      clip-path="url(#${side})"><g class="spin" data-i="${i}">
+      <path class="bloom" d="${wavy(r.f, r.lobes)}" fill="none" stroke-width="9" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity=".2"/>
+      <path class="line" d="${wavy(r.f, r.lobes)}" fill="none" stroke-width="1.6" stroke-linecap="round" vector-effect="non-scaling-stroke"/></g></g>`;
+  $('back').innerHTML = RINGS.map((r, i) => ring(r, i, 'far')).join('');
+  $('front').innerHTML = RINGS.map((r, i) => ring(r, i, 'near')).join('');
+  // the motes that circle while it thinks: seven, each drawn twice, once behind and once in front
+  const motes = side => Array.from({length: 7}, (_, k) =>
+    `<circle class="mote ${side}" data-k="${k}" r="${2 + (k % 3) * 0.6}" opacity="0"/>`).join('');
+  $('motesBack').innerHTML = `<g transform="rotate(-14 100 100)">${motes('far')}</g>`;
+  $('motesFront').innerHTML = `<g transform="rotate(-14 100 100)">${motes('near')}</g>`;
+  $('arc').setAttribute('d', arcPath(SPHERE * 1.27, -90, 105));
 })();
 
-// The eyes follow the phone itself: tilt it and JAS looks the way you tilt.
+function arcPath(r, from, sweep) {
+  const p = a => [CENTRE + r * Math.cos(a * Math.PI / 180), CENTRE + r * Math.sin(a * Math.PI / 180)];
+  const [x0, y0] = p(from), [x1, y1] = p(from + sweep);
+  return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+}
+
+let last = performance.now();
+
+// One frame: ease each number towards its target, then place everything. `draw()` is also called
+// when the phone is tilted or touched, so the light inside leans at once.
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const k = 1 - Math.exp(-dt * 5);
+  for (const key of Object.keys(target)) cur[key] += (target[key] - cur[key]) * k;
+  RINGS.forEach((r, i) => { phase[i] += r.dir * dt * 360 / r.secs * cur.spin; });
+  draw(now / 1000);
+  // a paused orb hardly changes, so it does not need sixty frames a second
+  if (cur.dot > 0.9 && target.dot === 1) setTimeout(() => requestAnimationFrame(frame), 60);
+  else requestAnimationFrame(frame);
+}
+
+function draw(t = performance.now() / 1000) {
+  const breathe = 0.5 + 0.5 * Math.sin(t * (target.dot ? 1.2 : 2.0));
+  const grow = 1 + breathe * (cur.pulse > 0.5 ? 0.045 : 0.02) + voice * 0.06;
+  $('sphere').setAttribute('transform', `translate(100 100) scale(${grow.toFixed(3)}) translate(-100 -100)`);
+  const lean = SPHERE * 0.30, drift = t * TAU / 24;
+  const a = [look.x * lean + SPHERE * 0.12 * Math.sin(drift), look.y * lean + SPHERE * 0.10 * Math.cos(2 * drift) + SPHERE * 0.14];
+  const b = [SPHERE * 0.38 * Math.cos(drift * 3 + 1.2), SPHERE * 0.30 * Math.sin(drift * 3 + 1.2) - SPHERE * 0.09];
+  const glow = Math.min(1, cur.glow), size = 0.75 + 0.25 * cur.glow;
+  $('lightGroupA').setAttribute('transform', `translate(${(100 + a[0]).toFixed(1)} ${(100 + a[1]).toFixed(1)}) scale(${size.toFixed(3)}) translate(-100 -100)`);
+  $('lightGroupA').setAttribute('opacity', glow.toFixed(2));
+  $('lightGroupB').setAttribute('transform', `translate(${(100 + b[0]).toFixed(1)} ${(100 + b[1]).toFixed(1)}) translate(-100 -100)`);
+  $('lightGroupB').setAttribute('opacity', Math.min(1, cur.glow).toFixed(2));
+  $('rim').setAttribute('opacity', Math.min(1, cur.rim).toFixed(2));
+
+  document.querySelectorAll('.spin').forEach(g =>
+    g.setAttribute('transform', `rotate(${phase[g.dataset.i].toFixed(2)} 100 100)`));
+  const rs = 1 + voice * 0.10;
+  document.querySelectorAll('#back > g, #front > g').forEach(g => g.style.opacity = Math.min(1, cur.waves).toFixed(2));
+  $('back').style.transformOrigin = $('front').style.transformOrigin = '100px 100px';
+  $('back').style.transform = $('front').style.transform = `scale(${rs.toFixed(3)})`;
+
+  // thinking: motes circling
+  const turn = t * TAU / 1.5;
+  for (const c of document.querySelectorAll('.mote')) {
+    const k = +c.dataset.k, ang = turn + k * TAU / 7, near = Math.sin(ang) > 0;
+    c.setAttribute('cx', (100 + SPHERE * 1.34 * Math.cos(ang)).toFixed(1));
+    c.setAttribute('cy', (100 + SPHERE * 1.34 * Math.sin(ang) * 0.42).toFixed(1));
+    c.setAttribute('opacity', (c.classList.contains('near') === near ? cur.orbit * (0.35 + 0.65 * k / 6) : 0).toFixed(2));
+  }
+  // working: one clean arc turning
+  $('arc').setAttribute('opacity', cur.arc.toFixed(2));
+  $('arc').setAttribute('transform', `rotate(${(t * 211).toFixed(1)} 100 100)`);
+  // paused: one dot
+  $('dot').setAttribute('opacity', (cur.dot * 0.85).toFixed(2));
+
+  // the glow around it
+  const halo = Math.min(1, cur.halo * (0.55 + breathe * 0.35) + voice * 0.5);
+  const h = $('halo'); h.style.opacity = halo.toFixed(2);
+  h.style.transform = `scale(${(0.92 + breathe * 0.06 + voice * 0.14).toFixed(3)})`;
+}
+paint(accentNow);
+requestAnimationFrame(frame);
+
+// The light inside the glass follows the phone itself: tilt it and it leans the way you tilt.
 // Touching the screen takes over while your thumb is down, then the tilt has it back.
 let tilting = false, thumbUntil = 0;
 
@@ -188,9 +230,7 @@ async function speak(id) {
 
 function show(state) {
   paint(state.colour);
-  showBody(state.body);
-  mood = MOODS[FACE_FOR[state.state] || 'calm'];
-  draw();
+  target = LOOKS[LOOK_FOR[state.state] || 'calm'];
   $('label').textContent = state.label;
   const busy = state.busy || state.state === 'listening';
   document.documentElement.style.setProperty('--glow', busy ? '1' : '0');
@@ -251,6 +291,7 @@ for (let i = 0; i < 9; i++) { const b = document.createElement('i'); $('level').
 
 function meter(level) {
   const peak = Math.min(1, level / 0.25);
+  voice = level > 0 ? peak : 0;   // the orb swells with your voice
   bars.forEach((b, i) => {
     const middle = 1 - Math.abs(i - 4) / 5;
     b.style.height = (4 + peak * 22 * middle).toFixed(0) + 'px';
@@ -298,7 +339,7 @@ async function send(blocks) {
 }
 
 function heard(buffer) {
-  // While JAS is speaking through this phone, ignore the microphone or it hears itself.
+  // While it is speaking through this phone, ignore the microphone or it hears itself.
   if (paused || (!player.paused && !player.ended)) {
     chunks = []; speaking = false; spokenMs = 0; peak = 0; return;
   }
@@ -390,6 +431,5 @@ addEventListener('visibilitychange', () => {
   else if (!paused) listen();
 });
 
-draw();
 poll();
 setInterval(poll, 900);

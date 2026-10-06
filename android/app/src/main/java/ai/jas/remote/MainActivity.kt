@@ -58,7 +58,7 @@ class MainActivity : AppCompatActivity() {
             laptop.pin = pin.text.toString()
             laptop.awayHost = away.text.toString()
             if (!laptop.configured) {
-                say("Enter the PIN first — JAS prints it on the laptop when it starts.")
+                say("Enter the PIN first — VEM prints it on the laptop when it starts.")
                 return@setOnClickListener
             }
             askPermissions()
@@ -66,7 +66,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<TextView>(R.id.hide).setOnClickListener {
             BubbleService.stop(this)
-            say("JAS is off the screen. The laptop carries on as normal.")
+            say("VEM is off the screen. The laptop carries on as normal.")
         }
 
         // Asking first, because a mis-tap here is exactly what stopped this working the first time.
@@ -138,14 +138,14 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (!Settings.canDrawOverlays(this)) {
-            say("Allow JAS to draw over other apps, then press Show again.")
+            say("Allow VEM to draw over other apps, then press Show again.")
             startActivity(
                 Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
             )
             return
         }
         BubbleService.start(this)
-        say("JAS is on screen and listening. Just talk.")
+        say("VEM is on screen and listening. Just talk.")
         moveTaskToBack(true)
     }
 
@@ -155,7 +155,7 @@ class MainActivity : AppCompatActivity() {
         val ok = permissions.indexOf(Manifest.permission.RECORD_AUDIO).let {
             it >= 0 && it < granted.size && granted[it] == PackageManager.PERMISSION_GRANTED
         }
-        if (ok) askPermissions() else say("Without the microphone JAS cannot hear you.")
+        if (ok) askPermissions() else say("Without the microphone VEM cannot hear you.")
     }
 
     private fun say(message: String) = Toast.makeText(this, message, Toast.LENGTH_LONG).show()

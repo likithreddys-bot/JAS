@@ -2,25 +2,34 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QAction, QColor, QCursor, QIcon, QPainter, QPixmap, QRadialGradient, QWindow
+from PySide6.QtGui import QAction, QColor, QCursor, QIcon, QPainter, QPen, QPixmap, QRadialGradient, QWindow
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from ui.bridge import UiBridge
 
 
 def orb_icon(color: str, size: int = 64) -> QIcon:
+    """The orb in miniature: smoked glass with the state's light inside it and a bright rim."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     base = QColor(color)
-    gradient = QRadialGradient(size * 0.38, size * 0.35, size * 0.6)
-    gradient.setColorAt(0.0, base.lighter(160))
-    gradient.setColorAt(0.6, base)
-    gradient.setColorAt(1.0, base.darker(170))
-    painter.setBrush(gradient)
+    disc = QRectF(size * 0.07, size * 0.07, size * 0.86, size * 0.86)
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.drawEllipse(QRectF(4, 4, size - 8, size - 8))
+    painter.setBrush(QColor("#17130F"))  # the glass
+    painter.drawEllipse(disc)
+    light = QRadialGradient(size * 0.48, size * 0.56, size * 0.42)  # the light inside, low and centred
+    light.setColorAt(0.0, base.lighter(135))
+    light.setColorAt(0.55, base)
+    light.setColorAt(1.0, QColor(base.red(), base.green(), base.blue(), 0))
+    painter.setBrush(light)
+    painter.drawEllipse(disc)
+    rim = QColor(base.lighter(150))
+    rim.setAlpha(230)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.setPen(QPen(rim, max(1.5, size * 0.06)))  # light caught at the edge, so it reads at 16 px
+    painter.drawEllipse(disc)
     painter.end()
     return QIcon(pixmap)
 

@@ -1,4 +1,4 @@
-"""JAS's face on the Windows lock screen.
+"""The assistant's face on the Windows lock screen.
 
 No application can draw on the lock screen itself — it runs on Winlogon's secure desktop, which
 only Microsoft's own UI and registered credential providers may touch. What an ordinary app *can*
@@ -10,6 +10,7 @@ thread and this runs from the lock watcher's thread.
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -17,18 +18,26 @@ from PIL import Image, ImageDraw, ImageFont
 log = logging.getLogger("jarvis.ui")
 
 WIDTH, HEIGHT = 1920, 1080
-BACKDROP = (11, 14, 20)
+BACKDROP = (8, 7, 6)  # the brand's warm black, the same as the website
+
+# JAS's face is the glass orb from the website: rendered once from the same 3D code
+# (website/studio, website/scripts/orb_assets.py) into transparent frames shipped with the app.
+ORB_DIR = Path(__file__).parent / "assets" / "orb"
+ORB_SIZE = 1176  # puts the sphere about 420 px across, the same size the old face was
+INK = (247, 241, 230)
+MUTED = (166, 156, 141)
 
 MOODS = {
-    # sphere colour, eye openness, brow angle (degrees, inward-down is positive), message template
+    # orb frame, message template, message colour
     # ("{name}" is substituted with the real name in draw_face - this was hardcoded as a literal
     # name before, so the angry warning always said "Likki"/"Alex" regardless of who was configured).
-    "watchful": ((255, 196, 107), 1.00, 0, ""),
-    "angry": ((232, 92, 84), 0.62, 20, "Don't touch {name}'s PC"),
-    # A brief, near-shut frame. Windows redraws the lock screen live when the image file changes
-    # even while already locked (confirmed: Windows Spotlight does the same thing), so cycling this
-    # against "watchful" every few seconds gives the lock screen a real, not simulated, blink.
-    "blink": ((255, 196, 107), 0.06, 0, ""),
+    "watchful": ("standby", "", MUTED),
+    "angry": ("error", "Don't touch {name}'s PC", (234, 110, 92)),
+    # The same orb a moment later: its rings have moved on and its light has breathed. Windows
+    # redraws the lock screen live when the image file changes even while already locked (confirmed:
+    # Windows Spotlight does the same thing), so cycling this against "watchful" every few seconds
+    # gives the lock screen real, not simulated, motion. (It was a near-shut blink when JAS had eyes.)
+    "blink": ("standby-b", "", MUTED),
 }
 
 
@@ -41,65 +50,38 @@ def _font(size: int):
     return ImageFont.load_default()
 
 
+@lru_cache(maxsize=4)
+def _orb(frame: str) -> Image.Image | None:
+    """One transparent orb frame, scaled for the lock screen. None (and a logged error) if missing."""
+    path = ORB_DIR / f"jas-orb-{frame}.png"
+    try:
+        return Image.open(path).convert("RGBA").resize((ORB_SIZE, ORB_SIZE), Image.LANCZOS)
+    except OSError:
+        log.exception("Lock-screen orb frame is missing: %s", path)
+        return None
+
+
 def draw_face(mood: str, name: str = "Alex", assistant: str = "JAS",
               with_text: bool = True) -> Image.Image:
-    """JAS's sphere and its eyes. The wallpaper wants just the face; the lock screen wants words."""
-    colour, openness, brow_tilt, warning = MOODS.get(mood, MOODS["watchful"])
+    """JAS's glowing orb. The wallpaper wants just the orb; the lock screen wants words."""
+    frame, warning, tone = MOODS.get(mood, MOODS["watchful"])
     warning = warning.format(name=name) if warning else warning
     image = Image.new("RGB", (WIDTH, HEIGHT), BACKDROP)
-    canvas = ImageDraw.Draw(image, "RGBA")
 
     cx, cy, radius = WIDTH // 2, int(HEIGHT * 0.44), 210
-    # A soft halo, drawn as widening translucent rings.
-    for step in range(28, 0, -1):
-        spread = radius + step * 9
-        canvas.ellipse([cx - spread, cy - spread, cx + spread, cy + spread],
-                       fill=(*colour, max(1, int(30 * (1 - step / 28)))))
-
-    skin = tuple(int(c * 0.42 + 242 * 0.58) for c in colour)  # washed towards warm white
-    canvas.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=skin)
-    canvas.ellipse([cx - radius, cy - radius, cx + radius, cy + radius],
-                   outline=tuple(min(255, int(c * 1.25)) for c in colour), width=3)
-
-    # Shading, so the sphere reads as lit rather than flat.
-    for step in range(radius, 0, -6):
-        shade = 1 - 0.35 * (1 - step / radius)
-        canvas.ellipse([cx - step, cy - step, cx + step, cy + step],
-                       fill=tuple(int(c * (2 - shade) / 1.0) if False else int(c * shade + 255 * (1 - shade) * 0.35)
-                                  for c in skin))
-    highlight = int(radius * 0.55)
-    canvas.ellipse([cx - highlight - 40, cy - highlight - 40, cx + highlight - 90, cy + highlight - 90],
-                   fill=(255, 255, 255, 26))
-
-    eye_dx, eye_r = 84, 66
-    for side in (-1, 1):
-        ex, ey = cx + side * eye_dx, cy + 2
-        eh = max(7, int(eye_r * openness))
-        canvas.ellipse([ex - eye_r, ey - eh, ex + eye_r, ey + eh], fill=(255, 255, 255))
-        pupil = min(34, eh)
-        canvas.ellipse([ex - pupil, ey - pupil, ex + pupil, ey + pupil], fill=(18, 21, 30))
-        canvas.ellipse([ex - pupil + 8, ey - pupil + 6, ex - pupil + 24, ey - pupil + 22],
-                       fill=(255, 255, 255, 235))
-
-        # Brows sit just above each eye. Inner ends drop when angry, level when calm.
-        half, by = 62, ey - eh - 34
-        tilt = int(half * brow_tilt / 45)
-        canvas.line([(ex - half, by + tilt * side), (ex + half, by - tilt * side)],
-                    fill=(18, 21, 30), width=15)
+    orb = _orb(frame)
+    if orb is not None:
+        image.paste(orb, (cx - ORB_SIZE // 2, cy - ORB_SIZE // 2), orb)
 
     if not with_text:
         return image
 
+    canvas = ImageDraw.Draw(image)
     title = _font(64)
     small = _font(34)
     label = f"{name}'s PC"
-    canvas.text((cx, cy + radius + 90), label, font=title, fill=(232, 236, 244), anchor="mm")
-    if warning:
-        canvas.text((cx, cy + radius + 165), warning, font=small, fill=tuple(min(255, c + 20) for c in colour),
-                    anchor="mm")
-    else:
-        canvas.text((cx, cy + radius + 165), f"{assistant} is watching", font=small,
-                    fill=(140, 150, 170), anchor="mm")
+    canvas.text((cx, cy + radius + 125), label, font=title, fill=INK, anchor="mm")
+    canvas.text((cx, cy + radius + 200), warning or f"{assistant} is watching", font=small, fill=tone, anchor="mm")
     return image
 
 

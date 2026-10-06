@@ -1,28 +1,35 @@
-"""Visual language: one colour, label and facial expression per state, shared by the orb and the tray."""
+"""Visual language: one colour, label and look per state, shared by the orb, the tray and the phone.
+
+VEM's palette is the website's: black, champagne gold, and a little ember red and green-gold, with no
+blue anywhere (website/src/core/states.ts has the same numbers). A state is read from the colour,
+the brightness and how the rings of light move (ui/qml/GlassOrb.qml); there is no face.
+"""
 from __future__ import annotations
 
 from app.core.state.states import JarvisState
 
 S = JarvisState
 
-# Every state is a body in the sky. The colour is that body's, so the orb and the panel behind it
-# change together and you can read the state from across the room.
+# The accent each state washes the glass with. All are mixes of the website's tokens:
+# gold #E8BE76, ivory #F7F1E6, ember #E2553F, green-gold #A8CF78, warm grey #A69C8D, black #080706.
 STATE_COLORS: dict[JarvisState, str] = {
-    S.STARTING: "#C9B79C",      # Mercury, just arriving
-    S.STANDBY: "#FFC46B",       # the Sun, awake and warm
-    S.WAKE_DETECTED: "#F5D9A0",  # Venus, bright the moment it is called
-    S.LISTENING: "#46C7B0",     # Earth, alive and listening
-    S.TRANSCRIBING: "#5A7FE0",  # Neptune, deep water, making sense of it
-    S.THINKING: "#E0A96D",      # Jupiter, the big mind
-    S.PLANNING: "#E0A96D",      # Jupiter
-    S.EXECUTING: "#E8703A",     # Mars, at work
-    S.OBSERVING: "#9FE3E8",     # Uranus, cool and watching
-    S.RESPONDING: "#E8D9A8",    # Saturn, speaking with its rings out
-    S.ERROR: "#FF5C6C",         # no body: an error should not look pretty
-    S.SLEEPING: "#93A0BA",      # the Moon, paused
-    S.RESTING: "#A9BEE4",       # the Moon, offline for the night
+    S.STARTING: "#A69C8D",       # warm grey, just arriving
+    S.STANDBY: "#E8BE76",        # gold, awake and warm
+    S.WAKE_DETECTED: "#F1DDB0",  # pale gold, bright the moment it is called
+    S.LISTENING: "#EDD09D",      # brighter gold, the rings ripple with your voice
+    S.TRANSCRIBING: "#BB9960",   # dimmed gold, making sense of it
+    S.THINKING: "#BB9960",       # dimmed gold, motes circling
+    S.PLANNING: "#BB9960",
+    S.EXECUTING: "#C2C877",      # green-gold, at work
+    S.OBSERVING: "#C2C877",
+    S.RESPONDING: "#E8BE76",     # gold, pulsing with its own voice
+    S.ERROR: "#E2553F",          # ember: an error should not look pretty
+    S.SLEEPING: "#A69C8D",       # warm grey, light nearly out
+    S.RESTING: "#A69C8D",
 }
 
+# Only the old phone apps (the ones with a planet and eyes) still read this, from /state; the desktop
+# window no longer draws planets. It can go once nobody runs a build from before VEM.
 STATE_BODY: dict[JarvisState, str] = {
     S.STARTING: "mercury",
     S.STANDBY: "sun",
@@ -39,8 +46,9 @@ STATE_BODY: dict[JarvisState, str] = {
     S.RESTING: "moon",
 }
 
-# How the face sits in each state. Face.qml turns each mood into lid, brow and pupil positions.
-STATE_FACES: dict[JarvisState, str] = {
+# Which look GlassOrb.qml draws in each state: how bright the light inside is, how fast the rings
+# revolve, whether motes circle or an arc runs, whether it is paused down to a single dot.
+STATE_LOOKS: dict[JarvisState, str] = {
     S.STARTING: "waking",
     S.STANDBY: "calm",
     S.WAKE_DETECTED: "alert",

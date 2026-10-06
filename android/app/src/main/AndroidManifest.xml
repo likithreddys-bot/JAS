@@ -10,7 +10,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
-        android:label="JAS"
+        android:label="@string/app_name"
         android:icon="@drawable/ic_jas"
         android:roundIcon="@drawable/ic_jas"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"

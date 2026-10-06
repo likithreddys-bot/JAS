@@ -64,10 +64,12 @@ def test_recorder_ignores_frames_when_not_started():
 class FakeSpeaker:
     def __init__(self):
         self.said = []
+        self.moods = []
         self.stopped = threading.Event()
 
-    def speak(self, text):
+    def speak(self, text, mood="reply"):
         self.said.append(text)
+        self.moods.append(mood)
         return True
 
     def stop(self):
@@ -333,7 +335,7 @@ def test_wake_word_while_speaking_cuts_speech():
     speaker, stt = FakeSpeaker(), FakeTranscriber("tell me a story")
     started = threading.Event()
 
-    def long_speak(text):
+    def long_speak(text, mood="reply"):
         speaker.said.append(text)
         if text.startswith("Once"):
             started.set()
@@ -638,3 +640,13 @@ def test_pausing_never_announces_that_it_stopped():
         assert wait_for(lambda: core.state.current is S.SLEEPING)
         time.sleep(0.05)
         assert STOPPED_PHRASE not in speaker.said, f"said {speaker.said}"
+
+
+def test_each_line_is_spoken_in_its_mood():
+    core, pipeline, speaker, stt, states, events = setup()
+    core.state.transition(S.WAKE_DETECTED)
+    assert wait_for(lambda: core.state.current is S.LISTENING)
+    speak_into(pipeline, [SPEECH] * 5 + [SILENCE] * 10)
+    assert wait_for(lambda: len(states) == 7)
+    # "Yes?" is a bright greeting; an answer with no action behind it is an ordinary reply.
+    assert speaker.moods == ["greeting", "reply"]

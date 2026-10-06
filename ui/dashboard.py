@@ -1,4 +1,4 @@
-"""Data behind the dashboard window: status, activity, settings, and the type-to-JARVIS box."""
+"""Data behind the dashboard window: status, activity, settings, and the type-a-request box."""
 from __future__ import annotations
 
 import logging
@@ -25,10 +25,10 @@ MEETINGS_REFRESH_SECONDS = 120
 
 # What the Settings tab offers, in order. (key, label, hint)
 EDITABLE = [
-    ("USER_NAME", "Your name", "How JARVIS addresses you"),
+    ("USER_NAME", "Your name", "How it addresses you"),
     ("HOME_CITY", "Home city", "Used for the morning weather"),
     ("CHROME_PROFILE", "Chrome profile", "Which profile websites and music open in (empty = last used)"),
-    ("HOTKEY", "Shortcut", "Wake JARVIS from anywhere, e.g. ctrl+space"),
+    ("HOTKEY", "Shortcut", "Wake it from anywhere, e.g. ctrl+space"),
     ("WAKE_WORD_THRESHOLD", "Wake word sensitivity", "0–1. Lower catches more, but triggers more often"),
     ("LISTEN_END_SILENCE", "Pause before I answer", "Seconds of silence that end your sentence"),
     ("LISTEN_START_TIMEOUT", "Wait for you to start", "Seconds"),
@@ -36,7 +36,7 @@ EDITABLE = [
     ("BREAK_REMINDER_MINUTES", "Break reminder", "Minutes of screen time; 0 turns it off"),
     ("MORNING_MUSIC", "Morning music", "Played after the morning briefing"),
     ("TTS_SPEED", "Voice speed", "1.0 is normal"),
-    ("STT_VOCABULARY", "Words to expect", "Names JARVIS should spell correctly"),
+    ("STT_VOCABULARY", "Words to expect", "Names it should spell correctly"),
     ("LLM_PROVIDER", "AI brain", "gemini or claude"),
     ("GEMINI_MODEL", "Gemini models", "Tried in order if one is busy"),
     ("GEMINI_THINKING", "Thinking depth", "minimal is fastest"),
@@ -137,7 +137,7 @@ class DashboardBridge(QObject):
     def ask(self, text: str) -> None:
         """Send a typed request, as if it had been spoken."""
         if not self._core.ask_text(text):
-            self.savedMessage.emit("JARVIS is busy right now.")
+            self.savedMessage.emit("The assistant is busy right now.")
 
     @Slot("QVariantMap")
     def save(self, changes: dict) -> None:

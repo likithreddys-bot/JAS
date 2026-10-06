@@ -45,7 +45,7 @@ class JasTrust(private val prefs: SharedPreferences) : X509TrustManager {
         if (seen != remembered) {
             // The key, not the address, so a new IP does not land here. This means another machine.
             throw CertificateException(
-                "This is not the laptop JAS was paired with. Expected $remembered but got $seen."
+                "This is not the laptop VEM was paired with. Expected $remembered but got $seen."
             )
         }
     }

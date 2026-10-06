@@ -10,19 +10,21 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.View
-import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
- * JAS's face, drawn the same way it is drawn on the laptop: a sphere that becomes a different
- * body in the sky for each state, two round eyes, and two thin curved brows.
+ * VEM's core, drawn the same way as on the laptop and the website: a sphere of smoked glass with
+ * light drifting inside it, ringed by waves of light that revolve around it. There is no face; the
+ * state is read from the colour, the brightness and how the rings move.
+ *
+ * (The class keeps its old name, JasFace, because the layout and the bubble service refer to it.)
  *
  * Everything is drawn relative to the radius, so the one view works as a small floating bubble
- * and as a large face on the app's own screen.
+ * and as a large orb on the app's own screen.
  */
 class JasFace @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null,
@@ -30,22 +32,20 @@ class JasFace @JvmOverloads constructor(
 
     // --- what the laptop told us --------------------------------------------
 
-    private var accent = Color.parseColor("#FFC46B")
-    private var body = "sun"
+    private var accent = Color.parseColor("#E8BE76")
     private var mood = "calm"
 
     fun show(snapshot: Snapshot) {
         accent = try { Color.parseColor(snapshot.colour) } catch (e: IllegalArgumentException) { accent }
-        body = snapshot.body
         mood = moodFor(snapshot.state)
         invalidate()
     }
 
-    /** How loudly you are speaking, 0..1 — the eyes widen with your voice while listening. */
+    /** How loudly you are speaking, 0..1 — the orb swells and its rings ripple with your voice. */
     var level: Float = 0f
         set(value) { field = value.coerceIn(0f, 1f) }
 
-    /** Which way the phone is tilted, each -1..1. The eyes look that way. */
+    /** Which way the phone is tilted, each -1..1. The light inside the glass leans that way. */
     fun tilt(x: Float, y: Float) {
         tiltX += (x.coerceIn(-1f, 1f) - tiltX) * 0.2f
         tiltY += (y.coerceIn(-1f, 1f) - tiltY) * 0.2f
@@ -57,10 +57,20 @@ class JasFace @JvmOverloads constructor(
     // --- the clock -----------------------------------------------------------
 
     private var startedAt = System.nanoTime()
+    private var lastFrame = startedAt
     private val seconds: Float get() = (System.nanoTime() - startedAt) / 1_000_000_000f
 
-    private var nextBlinkAt = 2.5f
-    private var blinkStartedAt = -1f
+    // Where each number is heading (from the mood) and where it is now. Each glides to its target,
+    // so a change of state is a change of light and not a cut.
+    private var glow = 1f
+    private var halo = 0.6f
+    private var rim = 0.9f
+    private var waves = 0.75f
+    private var spin = 1f
+    private var orbit = 0f
+    private var arc = 0f
+    private var dot = 0f
+    private val phase = FloatArray(RINGS.size)   // how far each ring's waves have travelled
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -76,6 +86,7 @@ class JasFace @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         running = true
+        lastFrame = System.nanoTime()
         postInvalidateOnAnimation()
     }
 
@@ -85,304 +96,246 @@ class JasFace @JvmOverloads constructor(
     }
 
     override fun onDraw(canvas: Canvas) {
+        val now = System.nanoTime()
+        val dt = ((now - lastFrame) / 1_000_000_000f).coerceIn(0f, 0.1f)
+        lastFrame = now
         val t = seconds
+        val look = lookFor(mood)
+        val k = 1f - exp(-dt * 5f)
+        glow += (look.glow - glow) * k
+        halo += (look.halo - halo) * k
+        rim += (look.rim - rim) * k
+        waves += (look.waves - waves) * k
+        spin += (look.spin - spin) * k
+        orbit += (look.orbit - orbit) * k
+        arc += (look.arc - arc) * k
+        dot += (look.dot - dot) * k
+        for (i in phase.indices) {
+            val ring = RINGS[i]
+            // one full turn of the ring takes `seconds`; the waves travel `lobes` crests per turn
+            phase[i] += ring.dir * dt * TAU * ring.lobes / ring.seconds * spin
+        }
+
         val w = width.toFloat()
         val h = height.toFloat()
-        val r = min(w, h) * 0.37f
+        val r = min(w, h) * 0.215f
         val cx = w / 2f
         val cy = h / 2f
-
         val asleep = mood == "asleep"
-        val breathe = 1f + 0.018f * sin(t * (if (asleep) 1.1f else 1.9f))
-        val radius = r * breathe
+        val breathe = 0.5f + 0.5f * sin(t * (if (asleep) 1.2f else 2.0f))
+        val radius = r * (1f + breathe * (if (look.pulse) 0.045f else 0.02f) + level * 0.06f)
 
-        halo(canvas, cx, cy, radius, t, asleep)
-        if (body == "saturn") rings(canvas, cx, cy, radius)
-        if (body == "sun") corona(canvas, cx, cy, radius, t) else sphere(canvas, cx, cy, radius)
-        markings(canvas, cx, cy, radius, t)
-        if (asleep) zzz(canvas, cx, cy, radius, t) else brows(canvas, cx, cy, radius)
-        eyes(canvas, cx, cy, radius, t, asleep)
+        halo(canvas, cx, cy, radius, breathe)
+        waveRings(canvas, cx, cy, radius, front = false)
+        motes(canvas, cx, cy, radius, t, front = false)
+        sphere(canvas, cx, cy, radius, t)
+        waveRings(canvas, cx, cy, radius, front = true)
+        motes(canvas, cx, cy, radius, t, front = true)
+        workingArc(canvas, cx, cy, radius, t)
+        pausedDot(canvas, cx, cy, radius)
 
-        if (running) postInvalidateOnAnimation()
+        // A paused orb hardly changes, so it does not need sixty frames a second.
+        if (running) {
+            if (asleep) postInvalidateDelayed(50) else postInvalidateOnAnimation()
+        }
     }
 
-    // --- the body ------------------------------------------------------------
+    // --- the light around it -------------------------------------------------
 
-    private fun halo(canvas: Canvas, cx: Float, cy: Float, r: Float, t: Float, asleep: Boolean) {
-        val pulse = 1f + 0.06f * sin(t * 1.6f) + level * 0.14f
-        val reach = r * (if (asleep) 1.22f else 1.38f) * pulse
+    private fun halo(canvas: Canvas, cx: Float, cy: Float, r: Float, breathe: Float) {
+        val reach = r * 2.35f * (0.92f + breathe * 0.06f + level * 0.14f)
+        val a = min(1f, halo * (0.55f + breathe * 0.35f) + level * 0.5f) * 0.5f
         fill.shader = RadialGradient(
             cx, cy, reach,
-            intArrayOf(alpha(accent, if (asleep) 0.16f else 0.34f), alpha(accent, 0f)),
-            floatArrayOf(0.42f, 1f), Shader.TileMode.CLAMP,
+            intArrayOf(alpha(accent, a), alpha(accent, 0f)),
+            floatArrayOf(0.30f, 1f), Shader.TileMode.CLAMP,
         )
         canvas.drawCircle(cx, cy, reach, fill)
         fill.shader = null
     }
 
-    private fun sphere(canvas: Canvas, cx: Float, cy: Float, r: Float) {
-        // Lit from the upper left, the way the reference sphere is.
-        fill.shader = RadialGradient(
-            cx - r * 0.28f, cy - r * 0.40f, r * 1.45f,
-            intArrayOf(lighten(accent, 0.42f), accent, darken(accent, 0.52f)),
-            floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP,
-        )
-        canvas.drawCircle(cx, cy, r, fill)
-        fill.shader = null
-
-        line.color = alpha(lighten(accent, 0.5f), 0.55f)
-        line.strokeWidth = max(1f, r * 0.02f)
-        canvas.drawCircle(cx, cy, r, line)
-    }
-
-    /** The Sun has no outline — it is light, so it gets curvy waves instead of a rim. */
-    private fun corona(canvas: Canvas, cx: Float, cy: Float, r: Float, t: Float) {
-        for (ring in 0..1) {
-            val base = r * (1.06f + ring * 0.10f)
-            val wobble = r * (0.045f + ring * 0.02f)
-            val speed = if (ring == 0) 1.0f else -0.7f
-            path.reset()
-            var a = 0f
-            while (a <= 360f) {
-                val rad = Math.toRadians(a.toDouble()).toFloat()
-                val d = base + wobble * sin(rad * 7f + t * speed * 1.8f)
-                val x = cx + d * cos(rad)
-                val y = cy + d * sin(rad)
-                if (a == 0f) path.moveTo(x, y) else path.lineTo(x, y)
-                a += 4f
-            }
-            path.close()
-            line.color = alpha(lighten(accent, 0.35f), if (ring == 0) 0.55f else 0.3f)
-            line.strokeWidth = max(1f, r * (0.028f - ring * 0.008f))
-            canvas.drawPath(path, line)
-        }
-        fill.shader = RadialGradient(
-            cx - r * 0.24f, cy - r * 0.34f, r * 1.4f,
-            intArrayOf(lighten(accent, 0.55f), accent, darken(accent, 0.30f)),
-            floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP,
-        )
-        canvas.drawCircle(cx, cy, r, fill)
-        fill.shader = null
-    }
-
-    private fun rings(canvas: Canvas, cx: Float, cy: Float, r: Float) {
-        canvas.save()
-        canvas.rotate(-18f, cx, cy)
-        line.color = alpha(lighten(accent, 0.4f), 0.75f)
-        line.strokeWidth = max(1f, r * 0.045f)
-        oval.set(cx - r * 1.38f, cy - r * 0.38f, cx + r * 1.38f, cy + r * 0.38f)
-        canvas.drawOval(oval, line)
-        line.strokeWidth = max(1f, r * 0.022f)
-        line.color = alpha(lighten(accent, 0.25f), 0.5f)
-        oval.set(cx - r * 1.21f, cy - r * 0.33f, cx + r * 1.21f, cy + r * 0.33f)
-        canvas.drawOval(oval, line)
-        canvas.restore()
-    }
+    // --- the rings -----------------------------------------------------------
 
     /**
-     * The markings that make each body recognisable. They are clipped to the sphere with real
-     * chord maths rather than a rectangular clip, so a band never runs off the edge.
+     * Three rings of light, each a circle seen at an angle: tilted, flattened, with a wave running
+     * round it. The near half passes in front of the glass and the far half behind it.
      */
-    private fun markings(canvas: Canvas, cx: Float, cy: Float, r: Float, t: Float) {
-        if (body.isEmpty() || body == "sun") return
+    private fun waveRings(canvas: Canvas, cx: Float, cy: Float, r: Float, front: Boolean) {
+        val from = if (front) 0 else STEPS / 2
+        val to = if (front) STEPS / 2 else STEPS
+        for (i in RINGS.indices) {
+            val ring = RINGS[i]
+            val base = r * ring.factor * (1f + level * 0.10f)
+            val amp = base * 0.065f
+            canvas.save()
+            canvas.translate(cx, cy)
+            canvas.rotate(ring.tilt)
+            path.reset()
+            for (k in from..to) {
+                val a = k * TAU / STEPS
+                val rad = base + amp * sin(ring.lobes * a + phase[i])
+                val x = rad * cos(a)
+                val y = rad * sin(a) * ring.squash
+                if (k == from) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            // a wide, soft bloom under a crisp line: the line is the ring, the bloom is its glow
+            line.color = alpha(accent, 0.20f * waves)
+            line.strokeWidth = max(2f, r * 0.19f)
+            canvas.drawPath(path, line)
+            line.color = alpha(lighten(accent, 0.25f), 0.95f * waves)
+            line.strokeWidth = max(1f, r * 0.038f)
+            canvas.drawPath(path, line)
+            canvas.restore()
+        }
+    }
+
+    /** Thinking: a handful of motes of light circling the glass. */
+    private fun motes(canvas: Canvas, cx: Float, cy: Float, r: Float, t: Float, front: Boolean) {
+        if (orbit < 0.02f) return
         canvas.save()
-        path.reset()
-        path.addCircle(cx, cy, r, Path.Direction.CW)
-        canvas.clipPath(path)
-        fill.style = Paint.Style.FILL
-        when (body) {
-            "moon", "mercury" -> craters(canvas, cx, cy, r)
-            "jupiter" -> bands(canvas, cx, cy, r, 5, 0.30f, storm = true)
-            "saturn" -> bands(canvas, cx, cy, r, 4, 0.18f, storm = false)
-            "neptune", "uranus" -> bands(canvas, cx, cy, r, 2, 0.14f, storm = false)
-            "earth" -> seas(canvas, cx, cy, r, t)
-            "venus" -> bands(canvas, cx, cy, r, 3, 0.12f, storm = false)
-            "mars" -> mars(canvas, cx, cy, r)
+        canvas.translate(cx, cy)
+        canvas.rotate(-14f)
+        val turn = t * TAU / 1.5f
+        for (i in 0 until MOTES) {
+            val a = turn + i * TAU / MOTES
+            val sinA = sin(a)
+            if ((sinA > 0f) != front) continue
+            fill.color = alpha(lighten(accent, 0.5f), orbit * (0.35f + 0.65f * i / (MOTES - 1)))
+            canvas.drawCircle(r * 1.34f * cos(a), r * 1.34f * sinA * 0.42f, r * (0.05f + 0.012f * (i % 3)), fill)
         }
         canvas.restore()
     }
 
-    private fun craters(canvas: Canvas, cx: Float, cy: Float, r: Float) {
-        // x, y and size as fractions of the radius, chosen to sit clear of the eyes.
-        val spots = floatArrayOf(
-            -0.62f, -0.48f, 0.17f,
-            0.55f, -0.58f, 0.12f,
-            -0.30f, 0.66f, 0.15f,
-            0.44f, 0.60f, 0.20f,
-            0.74f, 0.16f, 0.10f,
-            -0.78f, 0.20f, 0.11f,
-        )
-        var i = 0
-        while (i < spots.size) {
-            val x = cx + spots[i] * r
-            val y = cy + spots[i + 1] * r
-            val size = spots[i + 2] * r
-            fill.color = alpha(darken(accent, 0.45f), 0.55f)
-            canvas.drawCircle(x, y, size, fill)
-            fill.color = alpha(lighten(accent, 0.35f), 0.35f)
-            canvas.drawCircle(x - size * 0.18f, y - size * 0.22f, size * 0.62f, fill)
-            i += 3
-        }
+    /** Working: one clean arc keeps pace with the job. */
+    private fun workingArc(canvas: Canvas, cx: Float, cy: Float, r: Float, t: Float) {
+        if (arc < 0.02f) return
+        val reach = r * 1.27f
+        oval.set(cx - reach, cy - reach, cx + reach, cy + reach)
+        line.color = alpha(lighten(accent, 0.3f), 0.95f * arc)
+        line.strokeWidth = max(1.5f, r * 0.045f)
+        canvas.drawArc(oval, -90f + t * 211f, 105f, false, line)
     }
 
-    private fun bands(canvas: Canvas, cx: Float, cy: Float, r: Float, count: Int,
-                      strength: Float, storm: Boolean) {
-        for (i in 0 until count) {
-            // Spread the bands over the sphere but leave the middle, where the eyes are, alone.
-            val at = -0.82f + 1.64f * (i + 0.5f) / count
-            if (abs(at) < 0.30f) continue
-            val thickness = r * 0.13f
-            val y = cy + at * r
-            val half = chord(abs(at) * r + thickness * 0.5f, r)
-            fill.color = alpha(if (i % 2 == 0) darken(accent, 0.38f) else lighten(accent, 0.30f), strength)
-            oval.set(cx - half, y - thickness / 2f, cx + half, y + thickness / 2f)
-            canvas.drawRoundRect(oval, thickness, thickness, fill)
-        }
-        if (storm) {
-            fill.color = alpha(Color.parseColor("#C8603A"), 0.55f)
-            oval.set(cx + r * 0.20f, cy + r * 0.44f, cx + r * 0.62f, cy + r * 0.64f)
-            canvas.drawOval(oval, fill)
-        }
+    /** Paused: the light is nearly out, the rings are still, and one dot says it is still here. */
+    private fun pausedDot(canvas: Canvas, cx: Float, cy: Float, r: Float) {
+        if (dot < 0.02f) return
+        fill.color = alpha(accent, 0.85f * dot)
+        canvas.drawCircle(cx, cy + r * 1.55f, max(2f, r * 0.05f), fill)
     }
 
-    private fun seas(canvas: Canvas, cx: Float, cy: Float, r: Float, t: Float) {
-        val drift = sin(t * 0.25f) * r * 0.05f
-        fill.color = alpha(Color.parseColor("#2E8B6B"), 0.55f)
-        oval.set(cx - r * 0.78f + drift, cy + r * 0.32f, cx - r * 0.10f + drift, cy + r * 0.74f)
-        canvas.drawOval(oval, fill)
-        oval.set(cx + r * 0.22f + drift, cy - r * 0.74f, cx + r * 0.76f + drift, cy - r * 0.34f)
-        canvas.drawOval(oval, fill)
-        fill.color = alpha(Color.WHITE, 0.32f)
-        oval.set(cx - r * 0.55f, cy - r * 0.95f, cx + r * 0.10f, cy - r * 0.62f)
-        canvas.drawOval(oval, fill)
-    }
+    // --- the glass -----------------------------------------------------------
 
-    private fun mars(canvas: Canvas, cx: Float, cy: Float, r: Float) {
-        fill.color = alpha(Color.WHITE, 0.40f)
-        val capY = cy - r * 0.86f
-        val half = chord(r * 0.86f, r)
-        oval.set(cx - half, capY - r * 0.16f, cx + half, capY + r * 0.16f)
-        canvas.drawOval(oval, fill)
-        fill.color = alpha(darken(accent, 0.45f), 0.45f)
-        oval.set(cx - r * 0.70f, cy + r * 0.34f, cx + r * 0.06f, cy + r * 0.78f)
-        canvas.drawOval(oval, fill)
-    }
+    private fun sphere(canvas: Canvas, cx: Float, cy: Float, r: Float, t: Float) {
+        val drift = t * TAU / 24f
+        val leanX = tiltX * r * 0.30f
+        val leanY = tiltY * r * 0.30f
 
-    /** Half the width of the sphere at a given distance from its middle. */
-    private fun chord(fromCentre: Float, r: Float): Float {
-        val d = min(abs(fromCentre), r)
-        return sqrt(r * r - d * d)
-    }
+        // smoked glass: near-black with a warm cast, a little lighter low down where light gathers
+        radial(canvas, cx, cy, r, cx - r * 0.08f, cy - r * 0.20f, r * 1.25f,
+            intArrayOf(0xFF2C2216.toInt(), 0xFF17130F.toInt(), 0xFF0C0A07.toInt()), floatArrayOf(0f, 0.55f, 1f))
 
-    // --- the face ------------------------------------------------------------
+        // the light inside, drifting, and leaning the way the phone is tilted
+        radial(canvas, cx, cy, r,
+            cx + r * 0.12f * sin(drift) + leanX, cy + r * 0.10f * cos(2f * drift) + leanY + r * 0.14f, r * 1.05f,
+            intArrayOf(
+                alpha(mix(accent, Color.WHITE, 0.45f), 0.95f * glow),
+                alpha(accent, 0.80f * glow),
+                alpha(mix(accent, GLASS, 0.55f), 0.38f * glow),
+                alpha(accent, 0f),
+            ),
+            floatArrayOf(0f, 0.30f, 0.70f, 1f))
 
-    private fun brows(canvas: Canvas, cx: Float, cy: Float, r: Float) {
-        val m = expression()
-        line.color = INK
+        // a second, slower light turning the other way, which is what makes it look alive
+        radial(canvas, cx, cy, r,
+            cx + r * 0.38f * cos(drift * 3f + 1.2f), cy + r * 0.30f * sin(drift * 3f + 1.2f) - r * 0.09f, r * 0.72f,
+            intArrayOf(alpha(mix(accent, EMBER, 0.25f), 0.34f * glow), alpha(accent, 0f)),
+            floatArrayOf(0f, 1f))
+
+        // light caught at the edge of the glass
+        radial(canvas, cx, cy, r, cx, cy, r,
+            intArrayOf(alpha(accent, 0f), alpha(accent, 0f),
+                alpha(lighten(accent, 0.2f), 0.40f * rim), alpha(lighten(accent, 0.5f), 0.85f * rim)),
+            floatArrayOf(0f, 0.74f, 0.93f, 1f))
+
+        // the curved reflection of a window along the upper left, which is what reads as glass
+        oval.set(cx - r * 0.84f, cy - r * 0.84f, cx + r * 0.84f, cy + r * 0.84f)
+        line.color = Color.argb(128, 255, 248, 230)
         line.strokeWidth = max(1.5f, r * 0.055f)
-        val span = r * 0.21f
-        val y = cy - r * 0.50f + m.brow * r
-        for (side in intArrayOf(-1, 1)) {
-            val mid = cx + side * r * 0.37f
-            val lift = m.angry * r * 0.10f * side
-            path.reset()
-            path.moveTo(mid - span, y + lift + m.arch * r * 0.04f)
-            path.quadTo(mid, y - m.arch * r * 0.11f, mid + span, y - lift + m.arch * r * 0.04f)
-            canvas.drawPath(path, line)
-        }
+        canvas.drawArc(oval, 196f, 50f, false, line)
+        line.color = Color.argb(56, 255, 248, 230)
+        line.strokeWidth = max(1f, r * 0.032f)
+        canvas.drawArc(oval, 252f, 16f, false, line)
+
+        // a soft bloom of that reflection, and a small bright glint where it is strongest
+        fill.shader = RadialGradient(
+            cx - r * 0.42f, cy - r * 0.50f, r * 0.28f,
+            intArrayOf(Color.argb(110, 255, 248, 230), Color.argb(0, 255, 248, 230)),
+            floatArrayOf(0f, 1f), Shader.TileMode.CLAMP,
+        )
+        canvas.drawCircle(cx - r * 0.42f, cy - r * 0.50f, r * 0.28f, fill)
+        fill.shader = null
+        fill.color = Color.argb((min(1f, 0.4f + glow * 0.5f) * 204).toInt(), 255, 255, 245)
+        canvas.save()
+        canvas.rotate(-34f, cx - r * 0.34f, cy - r * 0.44f)
+        oval.set(cx - r * 0.34f - r * 0.05f, cy - r * 0.44f - r * 0.03f, cx - r * 0.34f + r * 0.05f, cy - r * 0.44f + r * 0.03f)
+        canvas.drawRoundRect(oval, r * 0.03f, r * 0.03f, fill)
+        canvas.restore()
+
+        // a hairline at the very edge
+        line.color = alpha(lighten(accent, 0.5f), 0.35f * rim)
+        line.strokeWidth = max(1f, r * 0.018f)
+        canvas.drawCircle(cx, cy, r - line.strokeWidth / 2f, line)
     }
 
-    private fun eyes(canvas: Canvas, cx: Float, cy: Float, r: Float, t: Float, asleep: Boolean) {
-        val m = expression()
-        val eyeR = r * 0.27f * (1f + level * 0.10f) * m.open
-        val eyeY = cy + r * 0.05f
-        val shut = blink(t, asleep)
-
-        for (side in intArrayOf(-1, 1)) {
-            val ex = cx + side * r * 0.37f
-            if (shut > 0.92f) {
-                line.color = INK
-                line.strokeWidth = max(1.5f, r * 0.06f)
-                path.reset()
-                path.moveTo(ex - eyeR, eyeY)
-                path.quadTo(ex, eyeY + eyeR * 0.45f, ex + eyeR, eyeY)
-                canvas.drawPath(path, line)
-                continue
-            }
-            val lid = 1f - shut
-            fill.color = Color.WHITE
-            oval.set(ex - eyeR, eyeY - eyeR * lid, ex + eyeR, eyeY + eyeR * lid)
-            canvas.drawOval(oval, fill)
-
-            // The pupils follow the tilt of the phone, and wander a little when thinking.
-            val wanderX = if (m.wander) sin(t * 0.8f) * 0.28f else 0f
-            val wanderY = if (m.wander) cos(t * 0.6f) * 0.16f else 0f
-            val gx = (tiltX + wanderX).coerceIn(-1f, 1f) * eyeR * 0.42f
-            val gy = (tiltY + wanderY + m.gazeY).coerceIn(-1f, 1f) * eyeR * 0.38f * lid
-            val pupil = eyeR * 0.50f
-            fill.color = INK
-            canvas.drawCircle(ex + gx, eyeY + gy, pupil * min(1f, lid * 1.4f), fill)
-            fill.color = alpha(Color.WHITE, 0.95f)
-            canvas.drawCircle(ex + gx - pupil * 0.34f, eyeY + gy - pupil * 0.40f,
-                pupil * 0.30f * min(1f, lid * 1.4f), fill)
-        }
+    /** One gradient, painted only inside the sphere's circle, so a light can move without leaving the glass. */
+    private fun radial(canvas: Canvas, cx: Float, cy: Float, r: Float, gx: Float, gy: Float, reach: Float,
+                       colours: IntArray, stops: FloatArray) {
+        fill.shader = RadialGradient(gx, gy, reach, colours, stops, Shader.TileMode.CLAMP)
+        canvas.drawCircle(cx, cy, r, fill)
+        fill.shader = null
     }
 
-    /** 0 = wide open, 1 = shut. Schedules the next blink as it finishes one. */
-    private fun blink(t: Float, asleep: Boolean): Float {
-        if (asleep) return 1f
-        if (blinkStartedAt < 0f && t >= nextBlinkAt) blinkStartedAt = t
-        if (blinkStartedAt < 0f) return 0f
-        val into = t - blinkStartedAt
-        val length = 0.16f
-        if (into >= length) {
-            blinkStartedAt = -1f
-            nextBlinkAt = t + 2.4f + (abs(sin(t * 13.7f)) * 3.6f)
-            return 0f
-        }
-        val half = length / 2f
-        return if (into < half) into / half else (length - into) / half
-    }
+    // --- the looks -----------------------------------------------------------
 
-    private class Expression(
-        val open: Float, val brow: Float, val arch: Float,
-        val angry: Float, val gazeY: Float, val wander: Boolean,
+    /**
+     * How each mood looks: glow = light inside the glass, halo = glow around it, rim = light caught
+     * at the edge, waves = ring brightness, spin = how fast the rings revolve. The same numbers as
+     * ui/qml/GlassOrb.qml on the laptop.
+     */
+    private class Look(
+        val glow: Float, val halo: Float, val rim: Float, val waves: Float, val spin: Float,
+        val orbit: Float = 0f, val arc: Float = 0f, val dot: Float = 0f, val pulse: Boolean = false,
     )
 
-    private fun expression(): Expression = when (mood) {
-        "waking" -> Expression(0.72f, 0.04f, 0.5f, 0f, 0.15f, false)
-        "alert" -> Expression(1.12f, -0.05f, 1.2f, 0f, -0.10f, false)
-        "listening" -> Expression(1.06f, -0.03f, 1.0f, 0f, 0f, false)
-        "thinking" -> Expression(0.92f, 0.01f, 0.7f, 0.25f, -0.25f, true)
-        "focused" -> Expression(0.88f, 0.05f, 0.3f, 0.55f, 0.05f, false)
-        "warm" -> Expression(0.96f, -0.02f, 1.1f, 0f, 0.08f, false)
-        "concerned" -> Expression(1.0f, 0.03f, 0.2f, -0.75f, 0.10f, false)
-        "asleep" -> Expression(0.0f, 0.06f, 0f, 0f, 0f, false)
-        else -> Expression(1.0f, 0f, 0.9f, 0f, 0f, false)
+    private fun lookFor(mood: String): Look = when (mood) {
+        "waking" -> Look(0.60f, 0.35f, 0.70f, 0.40f, 0.6f)
+        "alert" -> Look(1.25f, 1.00f, 1.20f, 1.00f, 2.2f)
+        "listening" -> Look(1.30f, 1.10f, 1.20f, 1.00f, 2.4f)
+        "thinking" -> Look(0.60f, 0.30f, 0.70f, 0.45f, 1.4f, orbit = 1f)
+        "focused" -> Look(0.90f, 0.60f, 1.00f, 0.55f, 1.7f, arc = 1f)
+        "warm" -> Look(1.10f, 0.75f, 1.00f, 1.00f, 1.6f, pulse = true)
+        "concerned" -> Look(1.00f, 0.80f, 1.20f, 0.65f, 2.6f)
+        "asleep" -> Look(0.30f, 0.12f, 0.45f, 0.15f, 0f, dot = 1f)
+        else -> Look(1.00f, 0.60f, 0.90f, 0.75f, 1.0f)
     }
 
-    /** The bright z's that drift up while JAS is resting. */
-    private fun zzz(canvas: Canvas, cx: Float, cy: Float, r: Float, t: Float) {
-        line.color = alpha(Color.parseColor("#9FE3E8"), 1f)
-        for (i in 0..2) {
-            val phase = ((t * 0.42f) + i * 0.333f) % 1f
-            val size = r * (0.16f + 0.14f * phase)
-            val x = cx + r * (0.52f + 0.34f * phase) + sin(phase * 6f) * r * 0.05f
-            val y = cy - r * (0.42f + 1.05f * phase)
-            val fade = if (phase < 0.15f) phase / 0.15f else (1f - phase) / 0.85f
-            line.color = alpha(Color.parseColor("#BFF3F7"), fade.coerceIn(0f, 1f))
-            line.strokeWidth = max(1.2f, size * 0.17f)
-            path.reset()
-            path.moveTo(x - size / 2f, y - size / 2f)
-            path.lineTo(x + size / 2f, y - size / 2f)
-            path.lineTo(x - size / 2f, y + size / 2f)
-            path.lineTo(x + size / 2f, y + size / 2f)
-            canvas.drawPath(path, line)
-        }
-    }
+    private class Ring(
+        val factor: Float, val lobes: Int, val tilt: Float, val squash: Float, val seconds: Float, val dir: Int,
+    )
 
     private companion object {
-        val INK = Color.parseColor("#12151E")
+        const val TAU = 6.2831855f
+        const val STEPS = 120
+        const val MOTES = 7
+        val GLASS = Color.parseColor("#17130F")
+        val EMBER = Color.parseColor("#E2553F")
+
+        // radius as a multiple of the sphere's, waves round the ring, tilt and flattening, seconds per turn
+        val RINGS = listOf(
+            Ring(1.36f, 6, -20f, 0.34f, 26f, 1),
+            Ring(1.62f, 8, 26f, 0.38f, 34f, -1),
+            Ring(1.90f, 4, -6f, 0.26f, 44f, 1),
+        )
 
         fun moodFor(state: String) = when (state) {
             "starting" -> "waking"
@@ -399,16 +352,12 @@ class JasFace @JvmOverloads constructor(
         fun alpha(colour: Int, a: Float) =
             Color.argb((a.coerceIn(0f, 1f) * 255).toInt(), Color.red(colour), Color.green(colour), Color.blue(colour))
 
-        fun lighten(colour: Int, by: Float) = Color.rgb(
-            Color.red(colour) + ((255 - Color.red(colour)) * by).toInt(),
-            Color.green(colour) + ((255 - Color.green(colour)) * by).toInt(),
-            Color.blue(colour) + ((255 - Color.blue(colour)) * by).toInt(),
-        )
+        fun lighten(colour: Int, by: Float) = mix(colour, Color.WHITE, by)
 
-        fun darken(colour: Int, by: Float) = Color.rgb(
-            (Color.red(colour) * (1f - by)).toInt(),
-            (Color.green(colour) * (1f - by)).toInt(),
-            (Color.blue(colour) * (1f - by)).toInt(),
+        fun mix(from: Int, to: Int, by: Float) = Color.rgb(
+            Color.red(from) + ((Color.red(to) - Color.red(from)) * by).toInt(),
+            Color.green(from) + ((Color.green(to) - Color.green(from)) * by).toInt(),
+            Color.blue(from) + ((Color.blue(to) - Color.blue(from)) * by).toInt(),
         )
     }
 }

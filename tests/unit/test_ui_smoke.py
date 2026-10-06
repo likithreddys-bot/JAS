@@ -12,7 +12,7 @@ from app.config.settings import PROJECT_ROOT
 from app.core.jarvis import Jarvis
 from app.core.state.states import JarvisState as S
 from ui.bridge import UiBridge, gaze_direction
-from ui.theme import STATE_BODY, STATE_COLORS, STATE_FACES, STATE_LABELS
+from ui.theme import STATE_BODY, STATE_COLORS, STATE_LABELS, STATE_LOOKS
 
 
 @pytest.fixture(scope="module")
@@ -21,24 +21,33 @@ def app():
 
 
 def test_theme_covers_every_state():
-    assert set(STATE_COLORS) == set(S) == set(STATE_LABELS) == set(STATE_FACES)
+    assert set(STATE_COLORS) == set(S) == set(STATE_LABELS) == set(STATE_LOOKS)
 
 
-def test_every_expression_renders(app):
-    """Face.qml must have a mood for each name the theme uses, and render it without warnings."""
+def test_no_state_is_blue():
+    """VEM's palette has no blue: for every state colour, blue is not the strongest channel."""
+    for state, colour in STATE_COLORS.items():
+        r, g, b = (int(colour[i:i + 2], 16) for i in (1, 3, 5))
+        assert b < max(r, g), f"{state.value} is bluish: {colour}"
+
+
+def test_every_look_renders(app):
+    """GlassOrb.qml must have a look for each name the theme uses, and render it without warnings."""
     from PySide6.QtQml import QQmlComponent, QQmlEngine
 
     engine = QQmlEngine()
     warnings = []
     engine.warnings.connect(lambda ws: warnings.extend(w.toString() for w in ws))
-    component = QQmlComponent(engine, QUrl.fromLocalFile(str(PROJECT_ROOT / "ui" / "qml" / "Face.qml")))
-    face = component.create()
-    assert face is not None, component.errorString()
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(PROJECT_ROOT / "ui" / "qml" / "GlassOrb.qml")))
+    orb = component.create()
+    assert orb is not None, component.errorString()
 
-    for expression in set(STATE_FACES.values()):
-        face.setProperty("expression", expression)
+    for look in set(STATE_LOOKS.values()):
+        orb.setProperty("look", look)
         app.processEvents()
-        assert face.property("mood") is not None, f"Face.qml has no mood for {expression!r}"
+        entry = orb.property("looks").property(look)  # the table entry itself, not the calm fallback
+        assert entry.isObject() and entry.property("glow").toNumber() > 0, f"GlassOrb.qml has no look for {look!r}"
+        assert orb.property("current").property("glow").toNumber() == entry.property("glow").toNumber()
     assert warnings == []
 
 
@@ -48,22 +57,22 @@ def test_every_expression_renders(app):
     ((500, -20), (0.0, -1.0)),           # 520 px above — the limit of the travel
     ((760, 500), (0.5, 0.0)),            # half way to the limit
 ])
-def test_eyes_look_towards_the_mouse(cursor, expected):
+def test_the_light_leans_towards_the_mouse(cursor, expected):
     x, y = gaze_direction(cursor, (500, 500), reach=520.0)
     assert (round(x, 3), round(y, 3)) == expected
 
 
-def test_eyes_stop_following_the_mouse_while_resting(app):
+def test_the_light_stops_following_the_mouse_while_resting(app):
     core = Jarvis()
     bridge = UiBridge(core)
     bridge.watchFrom(500, 500)
-    assert bridge._eyes.isActive()
+    assert bridge._gaze_timer.isActive()
 
     core.start()
     core.state.transition(S.RESTING)
     app.processEvents()
-    assert bridge.expression == "asleep"
-    assert not bridge._eyes.isActive()  # closed eyes don't need the 20 Hz timer
+    assert bridge.look == "asleep"
+    assert not bridge._gaze_timer.isActive()  # a paused orb doesn't need the 20 Hz timer
 
 
 def test_orb_loads_without_qml_warnings_and_follows_state(app):
@@ -106,17 +115,17 @@ def test_tray_menu_actions_drive_core_and_window(app):
     app.processEvents()
 
     actions = {a.text(): a for a in tray.contextMenu().actions()}
-    assert {"Hide JAS", "Pause JAS", "Exit"} <= set(actions)
+    assert {"Hide VEM", "Pause VEM", "Exit"} <= set(actions)
 
-    actions["Pause JAS"].trigger()
+    actions["Pause VEM"].trigger()
     app.processEvents()
     assert core.paused
-    assert "Resume JAS" in [a.text() for a in tray.contextMenu().actions()]
+    assert "Resume VEM" in [a.text() for a in tray.contextMenu().actions()]
 
-    actions["Hide JAS"].trigger()
+    actions["Hide VEM"].trigger()
     app.processEvents()
     assert not window.isVisible()
-    assert "Show JAS" in [a.text() for a in tray.contextMenu().actions()]
+    assert "Show VEM" in [a.text() for a in tray.contextMenu().actions()]
 
     bridge.requestMenu()  # right-click on the orb opens the same menu
     app.processEvents()
@@ -208,3 +217,25 @@ def test_sun_while_ready_and_moon_while_asleep(app):
 
     assert set(STATE_BODY) == set(S), "every state needs a body in the sky"
     assert bridge.body == "earth", "listening is Earth"
+
+
+def test_no_blue_anywhere_in_the_desktop_phone_and_android_sources():
+    """VEM is black and gold. No hex colour in the UI sources may have blue as its strongest channel.
+
+    QML and Android write 8-digit colours as ARGB, so the alpha pair comes first and is skipped.
+    """
+    import re
+
+    roots = [PROJECT_ROOT / "ui", PROJECT_ROOT / "android" / "app" / "src" / "main"]
+    suffixes = {".qml", ".py", ".html", ".js", ".kt", ".xml"}
+    offenders = []
+    for root in roots:
+        for path in root.rglob("*"):
+            if path.suffix not in suffixes or "__pycache__" in path.parts:
+                continue
+            for match in re.finditer(r"#([0-9A-Fa-f]{8}|[0-9A-Fa-f]{6})\b", path.read_text(encoding="utf-8")):
+                digits = match.group(1)[-6:]
+                r, g, b = (int(digits[i:i + 2], 16) for i in (0, 2, 4))
+                if b > max(r, g):
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: #{match.group(1)}")
+    assert offenders == []

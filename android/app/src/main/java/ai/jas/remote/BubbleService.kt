@@ -140,10 +140,10 @@ class BubbleService : Service(), SensorEventListener {
         }
 
         label = TextView(this).apply {
-            setTextColor(Color.parseColor("#C9D3E4"))
+            setTextColor(Color.parseColor("#D8CEBE"))
             textSize = 12f
             setPadding(dp(12), dp(7), dp(12), dp(7))
-            background = pill("#141A26")
+            background = pill("#17130F")
             visibility = View.GONE
         }
 
@@ -219,10 +219,10 @@ class BubbleService : Service(), SensorEventListener {
 
     private fun chip(text: String, onTap: () -> Unit) = TextView(this).apply {
         this.text = text
-        setTextColor(Color.parseColor("#E8ECF4"))
+        setTextColor(Color.parseColor("#F7F1E6"))
         textSize = 13f
         setPadding(dp(16), dp(9), dp(16), dp(9))
-        background = pill("#1B2432")
+        background = pill("#241E15")
         setOnClickListener { onTap() }
     }
 
@@ -230,7 +230,7 @@ class BubbleService : Service(), SensorEventListener {
         shape = GradientDrawable.RECTANGLE
         cornerRadius = dp(999).toFloat()
         setColor(Color.parseColor(colour))
-        setStroke(dp(1), Color.parseColor("#263041"))
+        setStroke(dp(1), Color.parseColor("#3A3122"))
     }
 
     private fun marginTop(px: Int) = LinearLayout.LayoutParams(
@@ -331,8 +331,8 @@ class BubbleService : Service(), SensorEventListener {
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL, "JAS", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Shows that JAS is on screen and listening"
+                NotificationChannel(CHANNEL, "VEM", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Shows that VEM is on screen and listening"
                     setShowBadge(false)
                 }
             )
@@ -348,8 +348,8 @@ class BubbleService : Service(), SensorEventListener {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
         return builder
-            .setContentTitle("JAS is listening")
-            .setContentText("Tap the face on screen for Pause and Hide")
+            .setContentTitle("VEM is listening")
+            .setContentText("Tap the orb on screen for Pause and Hide")
             .setSmallIcon(R.drawable.ic_jas)
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null as Icon?, "Hide", hide).build())

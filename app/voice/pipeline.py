@@ -58,7 +58,7 @@ LISTEN_WAIT_SLACK = 2.0
 
 
 class SpeakerLike(Protocol):
-    def speak(self, text: str) -> bool: ...
+    def speak(self, text: str, mood: str = "reply") -> bool: ...
     def stop(self) -> None: ...
 
 
@@ -127,7 +127,7 @@ class VoicePipeline:
         # Runs on the pipeline thread just before the first tool of a reply: a quick "On it."
         if self._working_ack_armed:
             self._working_ack_armed = False
-            self._speak(WORKING_PHRASE)
+            self._speak(WORKING_PHRASE, "working")
 
     def _on_interrupt(self, event: TaskInterrupted) -> None:
         # Pausing is meant to be silent: announcing "Okay, stopped." to someone who just muted
@@ -150,24 +150,25 @@ class VoicePipeline:
                 else:
                     log.exception("Voice turn failed")
                     self._fail(str(exc) or type(exc).__name__)
-                    self._say(FAILURE_PHRASE)
+                    self._say(FAILURE_PHRASE, "error")
             self._core.quiet = False
             if (self._core.cancelled.is_set() and self._core.state.current is S.STANDBY
                     and not self._silent_stop and not self._core.paused):
                 self._say(STOPPED_PHRASE)
             self._silent_stop = False
 
-    def _say(self, phrase: str) -> None:
+    def _say(self, phrase: str, mood: str = "reply") -> None:
         try:
-            self._speak(phrase)
+            self._speak(phrase, mood)
         except Exception:
             log.exception("Could not speak %r", phrase)
 
-    def _speak(self, text: str) -> bool:
-        """Say it out loud, unless this answer belongs to the phone that asked for it."""
+    def _speak(self, text: str, mood: str = "reply") -> bool:
+        """Say it out loud in `mood` (app/voice/tts/moods.py), unless this answer belongs to the
+        phone that asked for it."""
         if self._core.quiet:
             return True
-        return self._speaker.speak(text)
+        return self._speaker.speak(text, mood=mood)
 
     def _turn(self, kind: str = "request") -> None:
         state = self._core.state
@@ -189,7 +190,7 @@ class VoicePipeline:
             return
 
         if kind == "request":
-            self._speak(ACK_PHRASE)
+            self._speak(ACK_PHRASE, "greeting")
             self._recorder.begin()
             if not state.transition_from(S.WAKE_DETECTED, S.LISTENING):
                 self._recorder.cancel()
@@ -203,7 +204,7 @@ class VoicePipeline:
                 state.transition_from(S.WAKE_DETECTED, S.STANDBY)
                 return
             self._core.bus.publish(AssistantReply(text))
-            if not self._speak(text):
+            if not self._speak(text, "greeting"):
                 return
             if kind == "briefing" and first_today:
                 self._briefing_todos()
@@ -315,7 +316,7 @@ class VoicePipeline:
                 state.transition_from(S.TRANSCRIBING, S.STANDBY, "no follow-up")
             elif state.transition_from(S.TRANSCRIBING, S.RESPONDING):
                 self._core.bus.publish(AssistantReply(NOT_UNDERSTOOD))
-                self._speak(NOT_UNDERSTOOD)
+                self._speak(NOT_UNDERSTOOD, "error")
                 state.transition_from(S.RESPONDING, S.STANDBY)
             return False
         if not state.transition_from(S.TRANSCRIBING, S.THINKING):
@@ -347,7 +348,8 @@ class VoicePipeline:
                 return False  # paused / cancelled mid-reply
             spoken = f"{spoken} {sentence}".strip()
             self._core.bus.publish(AssistantReply(spoken))
-            if not self._speak(sentence):
+            # Once a tool has really done something, the answer is delivered as good news.
+            if not self._speak(sentence, "done" if self._did_something else "reply"):
                 return False
         self._working_ack_armed = False
         if not spoken:
@@ -358,7 +360,7 @@ class VoicePipeline:
             if not self._enter_responding():
                 return False
             self._core.bus.publish(AssistantReply(spoken))
-            self._speak(spoken)
+            self._speak(spoken, "done" if self._did_something else "error")
         self._on_exchange(text, spoken)
         return True
 
@@ -368,7 +370,7 @@ class VoicePipeline:
         if not self._enter_responding():
             raise TaskCancelled()
         self._core.bus.publish(AssistantReply(question))
-        self._speak(question)
+        self._speak(question, "confirming")
         self._recorder.begin()
         if not state.transition_from(S.RESPONDING, S.LISTENING):
             self._recorder.cancel()
